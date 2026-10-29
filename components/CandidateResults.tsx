@@ -40,7 +40,7 @@ export function CandidateResults({ results, query, existing }: { results: Candid
               ? <a href={`/talent/conversations/${encodeURIComponent(talking.id)}`} className="pill pill-accent">{talking.label} →</a>
               : <button type="button" className="btn-primary min-h-9 text-sm" onClick={() => { setAlias(p.alias); setError(undefined); }}>Talk</button>}
           </div>
-          <p className="mt-2 text-sm leading-relaxed">{p.publicSummary}</p>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{p.publicSummary}</p>
           {!!p.badges.length && <ul aria-label="Verified" className="mt-3 flex flex-wrap gap-1.5">{p.badges.map((b) => <li key={b} className="pill">✓ {BADGES[b] ?? 'Verified'}</li>)}</ul>}
           {p.openTo && <p className="muted mt-3 text-sm">Open to: {p.openTo}</p>}
         </li>;
