@@ -62,17 +62,21 @@ export class WorkEmailVerification {
     const now = Date.now(), code = String(randomInt(1_000_000)).padStart(6, '0'), salt = randomBytes(32).toString('hex');
     const ref = this.db.collection('talent_email_challenges').doc(id);
     const limit = this.db.collection('talent_email_limits').doc(hash(email));
+    const domainLimit = this.db.collection('talent_email_limits').doc(hash(`domain:${domain}`));
     await this.db.runTransaction(async (tx) => {
-      const [person, target] = await tx.getAll(ref, limit);
-      const next = (previous?: Window): Window => {
-        if (previous && now - previous.sentAt < 60_000) throw new TalentError('rate_limited', 'Wait one minute before requesting another code');
+      const [person, target, domainTarget] = await tx.getAll(ref, limit, domainLimit);
+      const next = (previous?: Window, max = 5, cooldownMs = 60_000): Window => {
+        if (cooldownMs > 0 && previous && now - previous.sentAt < cooldownMs) throw new TalentError('rate_limited', 'Wait one minute before requesting another code');
         const current = previous && now - previous.windowAt < 3_600_000 ? previous : { windowAt: now, count: 0, sentAt: 0 };
-        if (current.count >= 5) throw new TalentError('rate_limited', 'Too many codes requested. Try again in an hour.');
+        if (current.count >= max) throw new TalentError('rate_limited', 'Too many codes requested. Try again in an hour.');
         return { windowAt: current.windowAt, count: current.count + 1, sentAt: now };
       };
-      const personWindow = next(person!.data() as Window | undefined), targetWindow = next(target!.data() as Window | undefined);
+      const personWindow = next(person!.data() as Window | undefined);
+      const targetWindow = next(target!.data() as Window | undefined);
+      const domainWindow = next(domainTarget!.data() as Window | undefined, 20, 0);
       tx.set(ref, { ...personWindow, email, domain, salt, codeHash: hash(`${salt}:${code}`), expiresAt: now + 600_000, attempts: 0, consumed: false } satisfies Challenge);
       tx.set(limit, targetWindow);
+      tx.set(domainLimit, domainWindow);
     });
     try { await this.mailer([email], 'Your Parly Talent verification code', `Your code is ${code}. It expires in 10 minutes. If you did not request this code, ignore this message.`); }
     catch { throw new TalentError('unavailable', 'Could not send the verification code. Wait one minute and try again.'); }

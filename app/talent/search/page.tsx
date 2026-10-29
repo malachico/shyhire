@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { currentSession } from '@/lib/auth';
 import { TalentError } from '@/lib/profiles';
-import { profiles, type CandidateSearch } from '@/lib/talent';
+import { profiles, workEmailConfigured, type CandidateSearch } from '@/lib/talent';
 import { CandidateResults } from '@/components/CandidateResults';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +25,7 @@ export default async function TalentSearch({ searchParams }: { searchParams: Pro
       <label className="w-full flex-1 text-sm font-medium">Describe the role<textarea className="input mt-2 min-h-24 w-full" name="q" maxLength={1000} required defaultValue={q} placeholder="Backend engineer with Python, SQL and Docker" /></label>
       <button className="btn-primary min-h-11" type="submit">Search candidates</button>
     </form>
-    {error && <p role="alert" className="mt-6 text-sm text-[var(--bad-fg)]">{error}</p>}
+    {error && <p role="alert" className="mt-6 text-sm text-[var(--bad-fg)]">{error}{workEmailConfigured() && <> <a href="/talent/verify/work-email" className="underline">Verify work email</a></>}</p>}
     {results && <CandidateResults results={results} query={q} />}
   </main>;
 }

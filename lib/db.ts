@@ -1,9 +1,44 @@
 import { randomUUID } from 'node:crypto';
 import { Firestore } from '@google-cloud/firestore';
 import { getVercelOidcToken } from '@vercel/oidc';
-import { ExternalAccountClient } from 'google-auth-library';
+import { ExternalAccountClient, GoogleAuth, type BaseExternalAccountClient } from 'google-auth-library';
 
 export const DEFAULT_GCP_PROJECT_ID = 'parly-talent-0a7c87';
+
+export function gcpExternalAccountClient(): BaseExternalAccountClient | undefined {
+  const projectNumber = process.env.GCP_PROJECT_NUMBER;
+  const serviceAccountEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
+  const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID || 'vercel';
+  const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID || 'vercel';
+  if (!projectNumber || !serviceAccountEmail) return undefined;
+  return (
+    ExternalAccountClient.fromJSON({
+      type: 'external_account',
+      audience: `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`,
+      subject_token_type: 'urn:ietf:params:oauth:token-type:jwt',
+      token_url: 'https://sts.googleapis.com/v1/token',
+      service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
+      subject_token_supplier: {
+        getSubjectToken: getVercelOidcToken,
+      },
+    }) ?? undefined
+  );
+}
+
+const defaultGoogleAuth = new GoogleAuth({ scopes: 'https://www.googleapis.com/auth/cloud-platform' });
+
+/** Access token for GCP APIs (Vertex AI): uses Vercel OIDC Workload Identity Federation when configured, otherwise ADC. */
+export async function gcpAccessToken(): Promise<string> {
+  const external = gcpExternalAccountClient();
+  if (external) {
+    const { token } = await external.getAccessToken();
+    if (!token) throw new Error('Could not obtain GCP access token via Workload Identity Federation');
+    return token;
+  }
+  const token = await defaultGoogleAuth.getAccessToken();
+  if (!token) throw new Error('Could not obtain GCP access token');
+  return token;
+}
 
 /**
  * Creates a Firestore client for Talent's own GCP project (`parly-talent-0a7c87`).
@@ -19,23 +54,7 @@ export function createFirestore(): Firestore {
     });
   }
   const projectId = process.env.GCP_PROJECT_ID || DEFAULT_GCP_PROJECT_ID;
-  const projectNumber = process.env.GCP_PROJECT_NUMBER;
-  const serviceAccountEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
-  const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID || 'vercel';
-  const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID || 'vercel';
-
-  const authClient = projectNumber && serviceAccountEmail
-    ? ExternalAccountClient.fromJSON({
-        type: 'external_account',
-        audience: `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`,
-        subject_token_type: 'urn:ietf:params:oauth:token-type:jwt',
-        token_url: 'https://sts.googleapis.com/v1/token',
-        service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
-        subject_token_supplier: {
-          getSubjectToken: getVercelOidcToken,
-        },
-      }) ?? undefined
-    : undefined;
+  const authClient = gcpExternalAccountClient();
 
   return new Firestore({
     projectId,

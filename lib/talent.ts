@@ -1,16 +1,41 @@
 import { createHash } from 'node:crypto';
-import { db } from './db.ts';
+import type { Firestore } from '@google-cloud/firestore';
+import { db, DEFAULT_GCP_PROJECT_ID, gcpAccessToken } from './db.ts';
 import { appUrl } from './github.ts';
 import { Composio, TalentLinkedIn } from './linkedin.ts';
-import { Profiles } from './profiles.ts';
+import { firestoreLlmMeter, Profiles, vertexProfileImporter } from './profiles.ts';
 import { noticeMailer, WorkEmailVerification } from './workEmail.ts';
 
 export type { CandidateCard, CandidateSearch, Experience, ProfileDraft, TalentProfile, Verification } from './types.ts';
 
 let cachedProfiles: Profiles | undefined;
 
+export function createProfiles(
+  store: Firestore = db(),
+  importerOpts?: Partial<Parameters<typeof vertexProfileImporter>[0]>,
+): Profiles {
+  const instance = new Profiles(store);
+  instance.importer = vertexProfileImporter({
+    project: importerOpts?.project ?? process.env.VERTEX_PROJECT ?? process.env.GCP_PROJECT_ID ?? DEFAULT_GCP_PROJECT_ID,
+    location: importerOpts?.location ?? process.env.VERTEX_LOCATION ?? 'global',
+    model: importerOpts?.model ?? process.env.VERTEX_MODEL ?? 'gemini-2.5-flash',
+    prices: importerOpts?.prices ?? {
+      input: Number(process.env.LLM_PRICE_INPUT_PER_MTOK || 2),
+      output: Number(process.env.LLM_PRICE_OUTPUT_PER_MTOK || 12),
+    },
+    meter: importerOpts?.meter ?? firestoreLlmMeter(store),
+    accessToken: importerOpts?.accessToken ?? gcpAccessToken,
+    ...(importerOpts?.fetchImpl ? { fetchImpl: importerOpts.fetchImpl } : {}),
+  });
+  return instance;
+}
+
 export function profiles(): Profiles {
-  return (cachedProfiles ??= new Profiles(db()));
+  return (cachedProfiles ??= createProfiles());
+}
+
+export function workEmailConfigured(): boolean {
+  return Boolean((process.env.SMTP_USER ?? process.env.GMAIL_USER) && (process.env.SMTP_APP_PASSWORD ?? process.env.GMAIL_APP_PASSWORD));
 }
 
 export function workEmail(): WorkEmailVerification {
@@ -35,3 +60,4 @@ export function talentLinkedIn(): TalentLinkedIn | undefined {
     appUrl(),
   );
 }
+

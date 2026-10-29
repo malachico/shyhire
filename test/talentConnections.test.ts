@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { describe, it, mock } from 'node:test';
+import { describe, it } from 'node:test';
 import { testDb } from '../lib/db.ts';
 import { Composio, TalentLinkedIn, type ToolAccount } from '../lib/linkedin.ts';
 import { professionalDraft, Profiles } from '../lib/profiles.ts';
+import { createProfiles, profiles as defaultProfiles } from '../lib/talent.ts';
 
 function testPerson(name = 'Owner') {
   const id = `person-${randomUUID().slice(0, 8)}`;
@@ -17,13 +18,23 @@ const privateDraft = {
 };
 
 describe('Talent professional profile generation', () => {
-  it('generates a reviewable draft and persists only professional facts after approval', async () => {
-    const db = testDb(), profiles = new Profiles(db), person = testPerson();
-    profiles.importer = mock.fn(async () => privateDraft);
+  it('wires vertexProfileImporter + firestoreLlmMeter by default in createProfiles/profiles(), generates a reviewable draft and persists only professional facts after approval', async () => {
+    assert.equal(typeof defaultProfiles().importer, 'function');
+    const db = testDb(), person = testPerson();
+    const profiles = createProfiles(db, {
+      accessToken: async () => 'test-token',
+      fetchImpl: (async () => new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(privateDraft) }] } }],
+        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
+      }))) as typeof fetch,
+    });
     const draft = await profiles.draft(person, { text: 'Private Name original CV private@example.test' });
     assert.equal(draft.headline.includes('Backend engineer'), true);
     assert.equal(draft.about.includes('Senior'), true);
     assert.doesNotMatch(JSON.stringify(draft), /Private Name|Secret Employer|private@|https|identity.test/);
+    const usage = await db.collection('talent_llm_usage').get();
+    assert.equal(usage.size, 1);
+    assert.equal(usage.docs[0]!.data().personId, person.id);
     assert.equal((await profiles.mine(person)).version, 0);
     const saved = await profiles.save(person, { version: 0, ...privateDraft, preferences: 'Remote only', openTo: 'Backend roles' });
     const record = (await db.collection('profiles').doc(person.id).get()).data()!;

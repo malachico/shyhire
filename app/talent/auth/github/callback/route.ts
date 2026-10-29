@@ -19,8 +19,8 @@ export async function GET(request: Request) {
     const flow = JSON.parse(raw ?? 'null') as { state?: string; verifier?: string } | null;
     if (!flow?.state || !flow.verifier || !code || !same(flow.state, state)) throw new Error('Invalid sign-in state');
     const account = await githubAccount(code, flow.verifier);
-    await startSession({ githubId: account.id, login: account.login });
     await profiles().verify(String(account.id), account.verification);
+    await startSession({ githubId: account.id, login: account.login });
     return NextResponse.redirect(`${appUrl()}/talent/profile`);
   } catch (error) {
     const msg = error instanceof TalentError ? error.message : 'GitHub sign-in failed. Please try again.';

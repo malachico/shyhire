@@ -48,17 +48,24 @@ describe('Talent anonymous candidate search', () => {
     assert.deepEqual((await profiles.search(company, '')).profiles, []);
     await assert.rejects(profiles.search(company, 'x'.repeat(1001)), /1000/);
     await assert.rejects(profiles.search({ id: 'bot-1', kind: 'bot' }, 'Python'), /person/);
-    assert.equal(await profiles.personForAlias(company, saved.alias), one.id);
-    await assert.rejects(profiles.personForAlias(company, 'Candidate #00000000'), /No such candidate/);
   });
 
-  it("hides candidates blocked by the sign-in domain and never searches the caller's own profile", async () => {
+  it("requires a verified work email before searching, blocks verified domains, and never searches the caller's own profile", async () => {
     const db = testDb();
     const profiles = new Profiles(db);
     const caller = testPerson();
     await profiles.save(caller, { version: 0, headline: 'Python' });
     const candidate = testPerson();
-    await profiles.save(candidate, { version: 0, headline: 'Python', employerDomains: [caller.email.split('@')[1]!] });
-    assert.deepEqual((await profiles.search(caller, 'Python')).profiles, []);
+    await profiles.save(candidate, { version: 0, headline: 'Python', employerDomains: ['employer.test'] });
+
+    // Unverified searcher (even with an email on the caller object or GitHub verified) cannot search.
+    await profiles.verify(caller.id, { id: 'github', source: 'github', label: 'GitHub', verifiedAt: '', data: { languages: ['Python'] } });
+    await assert.rejects(profiles.search(caller.id, 'Python'), /Verify your work email/);
+    await assert.rejects(profiles.search(caller, 'Python'), /Verify your work email/);
+
+    // Once work email is verified, blocked domains are enforced and the caller's own profile is hidden.
+    await profiles.verify(caller.id, { id: 'work-email:employer.test', source: 'work-email', label: 'Work email verified', verifiedAt: '', data: { domain: 'employer.test' } });
+    assert.deepEqual((await profiles.search(caller.id, 'Python')).profiles, []);
   });
 });
+

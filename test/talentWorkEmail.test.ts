@@ -78,6 +78,11 @@ describe('Talent work email', () => {
     const results = await Promise.allSettled([service.request(third, 'same@employer.test'), second.request(fourth, 'same@employer.test')]);
     assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
     assert.equal(calls.length, beforeCalls + 1);
+
+    for (let i = 0; i < 17; i++) {
+      await service.request(testPerson(), `local-${i}@employer.test`);
+    }
+    await assert.rejects(service.request(testPerson(), 'overflow@employer.test'), /hour/);
   });
 
   it('does not consume a challenge if the profile update fails', async () => {

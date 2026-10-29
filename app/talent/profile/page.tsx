@@ -1,5 +1,5 @@
 import { currentSession } from '@/lib/auth';
-import { profiles, talentLinkedIn } from '@/lib/talent';
+import { profiles, talentLinkedIn, workEmailConfigured } from '@/lib/talent';
 import { TalentProfileEditor } from '@/components/TalentProfileEditor';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +16,6 @@ export default async function CandidateProfile({ searchParams }: { searchParams:
     </main>;
   }
   const profile = await profiles().mine(String(session.githubId));
-  return <TalentProfileEditor initial={profile} error={error} linkedinAvailable={Boolean(talentLinkedIn())} />;
+  return <TalentProfileEditor initial={profile} error={error} linkedinAvailable={Boolean(talentLinkedIn())} workEmailAvailable={workEmailConfigured()} />;
 }
 

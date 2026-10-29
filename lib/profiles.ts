@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Firestore, Transaction } from '@google-cloud/firestore';
+import { FieldValue, type Firestore, type Transaction } from '@google-cloud/firestore';
 import { GoogleAuth } from 'google-auth-library';
 import type { CandidateCard, Experience, ProfileDraft, TalentCaller, TalentProfile, Verification } from './types.ts';
 
@@ -17,7 +17,6 @@ export class TalentError extends Error {
     this.status = STATUS[code];
   }
 }
-export { TalentError as HubError };
 
 export const wire = { newId: (): string => randomUUID() };
 
@@ -188,6 +187,28 @@ export function costMicros(prices: LlmPrices, usage: LlmUsage): number {
   return Math.ceil((usage.promptTokenCount ?? 0) * prices.input + (usage.candidatesTokenCount ?? 0) * prices.output);
 }
 
+export function firestoreLlmMeter(db: Firestore, allowanceUsd = Number(process.env.LLM_MONTHLY_ALLOWANCE_USD || 5)): LlmMeter {
+  const allowanceMicros = Math.max(0, allowanceUsd) * 1_000_000;
+  const col = db.collection('talent_llm_usage');
+  const period = () => new Date().toISOString().slice(0, 7);
+  return {
+    async used(personId: string): Promise<number> {
+      if (allowanceMicros <= 0) return 1;
+      const snap = await col.doc(`${personId}_${period()}`).get();
+      return ((snap.data()?.micros as number | undefined) ?? 0) / allowanceMicros;
+    },
+    async add(personId: string, micros: number): Promise<void> {
+      const charge = Math.ceil(Math.max(0, micros));
+      if (charge <= 0) return;
+      const p = period();
+      await col.doc(`${personId}_${p}`).set(
+        { personId, period: p, micros: FieldValue.increment(charge), updatedAt: new Date().toISOString() },
+        { merge: true },
+      );
+    },
+  };
+}
+
 export function vertexProfileImporter(opts: { project: string; location: string; model: string; prices: LlmPrices; meter: LlmMeter; fetchImpl?: typeof fetch; accessToken?: () => Promise<string> }): ProfileImporter {
   const google = new GoogleAuth({ scopes: 'https://www.googleapis.com/auth/cloud-platform' });
   const token = opts.accessToken ?? (async () => (await google.getAccessToken())!);
@@ -262,12 +283,13 @@ export class Profiles {
     });
   }
   async search(caller: TalentCaller, raw: unknown): Promise<{ profiles: CandidateCard[]; capped: boolean }> {
-    const { id, email } = callerOf(caller);
+    const { id } = callerOf(caller);
     const query = text(raw ?? '', 1000, 'Role description');
+    const own = await this.mine(id);
+    const domains = new Set(verifiedDomains(own.verified));
+    if (!domains.size) throw new TalentError('forbidden', 'Verify your work email before searching candidates');
     const terms = matchingTerms(query).map((term) => term.toLowerCase());
     if (!terms.length) return { profiles: [], capped: false };
-    const own = await this.mine(id);
-    const domains = new Set([email?.split('@')[1]?.toLowerCase(), ...verifiedDomains(own.verified)].filter((d): d is string => Boolean(d)));
     const found = await this.col.where('searchable', '==', true).limit(201).get();
     const ranked = found.docs.slice(0, 200).flatMap((doc) => {
       const profile = doc.data() as TalentProfile;
@@ -280,13 +302,6 @@ export class Profiles {
     });
     ranked.sort((a, b) => b.score - a.score || a.card.alias.localeCompare(b.card.alias));
     return { profiles: ranked.slice(0, 20).map((r) => r.card), capped: found.size > 200 };
-  }
-  async personForAlias(caller: TalentCaller, raw: unknown): Promise<string> {
-    callerOf(caller);
-    const alias = text(raw, 80, 'Candidate alias');
-    const found = await this.col.where('alias', '==', alias).where('searchable', '==', true).limit(1).get();
-    if (found.empty) throw new TalentError('not_found', 'No such candidate');
-    return found.docs[0]!.id;
   }
   async draft(caller: TalentCaller, raw: unknown): Promise<ProfileDraft> {
     const { id } = callerOf(caller);
