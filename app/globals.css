@@ -1,0 +1,18 @@
+@import 'tailwindcss';
+
+/* Parly's light tokens (from the Parly web app), so Talent looks like part of the family. */
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --fg: #17161c;
+  --muted: #5e5b68;
+  --border: #e4e2dc;
+  --accent: #4338ca;
+  --accent-hover: #3730a3;
+  --accent-fg: #ffffff;
+  --bad-fg: #a3262a;
+}
+body { background: var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 15px; }
+.btn-primary { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; padding: 0 1.25rem; border-radius: 10px; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn { display: inline-flex; align-items: center; min-height: 40px; padding: 0 1rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
