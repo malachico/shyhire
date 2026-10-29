@@ -1,7 +1,7 @@
 import { FieldValue, type Firestore } from '@google-cloud/firestore';
 import { db } from './db.ts';
 import { parly, ParlyError, type Room, type RoomMessage, type RoomStatus, type SideInput } from './parly.ts';
-import { callerOf, domainBlocked, TalentError, text, verifiedDomains, type TalentCaller, type TalentProfile } from './profiles.ts';
+import { callerOf, domainBlocked, TalentError, text, verifiedDomains, type CvDetails, type TalentCaller, type TalentProfile } from './profiles.ts';
 
 export type RoomSideKind = 'company' | 'candidate';
 
@@ -126,6 +126,18 @@ const HIRING_AGENT_INSTRUCTIONS =
   'You represent the hiring company in an anonymous Shyhire conversation. Evaluate mutual role, technical, compensation, and working-mode fit against your private brief without asking for or revealing personal identifiers. Use ASK MY SIDE when you need a decision from the hiring team, and draft/update the shared fit summary once fit is clear.';
 const CANDIDATE_AGENT_INSTRUCTIONS =
   'You represent the candidate in an anonymous Shyhire conversation. Protect candidate anonymity strictly: never reveal names, employers, URLs, or raw private text. Evaluate mutual fit against your private brief, use ASK MY SIDE when a decision is needed from the candidate, and draft/update the shared fit summary once fit is clear.';
+
+/** CV details as brief lines for the candidate's own agent. */
+function details(d?: CvDetails): string {
+  if (!d) return '';
+  const lines = [
+    d.years !== undefined ? `Years of experience: ${d.years}` : '', d.seniority ? `Seniority: ${d.seniority}` : '',
+    d.industries.length ? `Industries: ${d.industries.join(', ')}` : '', d.skills.length ? `Skills: ${d.skills.join(', ')}` : '',
+    d.leadership ? `Leadership: ${d.leadership}` : '', d.education ? `Education: ${d.education}` : '',
+    d.languages.length ? `Languages: ${d.languages.join(', ')}` : '', d.certifications.length ? `Certifications: ${d.certifications.join(', ')}` : '',
+  ].filter(Boolean);
+  return lines.length ? `Self-reported CV details:\n${lines.join('\n')}` : '';
+}
 
 const VALID_STATUSES = new Set<RoomStatus>(['talking', 'needs_decision', 'agreed', 'stuck', 'closed']);
 
@@ -338,6 +350,7 @@ export class TalentRoomViews {
       .map((r) => `- ${r.title}${r.start || r.end ? ` (${r.start || '?'}–${r.end || 'Present'})` : ''}${r.description ? `: ${r.description.slice(0, 300)}` : ''}`);
     const candidateBriefText = [
       candidateProfile.publicSummary,
+      details(candidateProfile.details),
       roles.length ? `Self-reported roles (employer names withheld; never reveal names, employers or contact details):\n${roles.join('\n')}` : '',
       candidateProfile.openTo ? `Open to: ${candidateProfile.openTo}` : '',
       preferenceLines.length

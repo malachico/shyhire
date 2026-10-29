@@ -25,6 +25,18 @@ export interface SalaryPreference {
   currency: string;
 }
 
+/** What a company would ask about, pulled from the CV. Self-reported; never names employers or schools. */
+export interface CvDetails {
+  years?: number;
+  seniority?: string;
+  industries: string[];
+  skills: string[];
+  education?: string;
+  languages: string[];
+  certifications: string[];
+  leadership?: string;
+}
+
 /** One line companies see. Verified facts are built from checked data on the server; anything a person writes is 'cv'. */
 export interface Fact {
   id: string;
@@ -43,6 +55,7 @@ export interface TalentProfile {
   facts: Fact[];
   /** Ids of verified facts the person chose not to show. */
   hiddenFacts: string[];
+  details?: CvDetails;
   headline: string;
   about: string;
   experience: Experience[];
@@ -66,6 +79,7 @@ export interface ProfileDraft {
   experience: Experience[];
   /** The AI's suggested CV facts, when it could write them. */
   facts?: Fact[];
+  details?: CvDetails;
 }
 
 /** The only candidate fields companies receive before a match. */

@@ -227,3 +227,12 @@ describe('GitHub Talent identity', () => {
 });
 
 
+
+describe('CV details', () => {
+  it('keeps what companies ask about and drops junk', async () => {
+    const { cvDetails } = await import('../lib/profiles.ts');
+    const d = cvDetails({ years: 8.4, seniority: 'Senior', industries: ['Fintech', 'Fintech', 'Healthcare'], skills: ['Go'], education: 'BSc Computer Science', languages: ['English', 'Hebrew'], certifications: [], leadership: '', extra: 'x' });
+    assert.deepEqual(d, { years: 8, seniority: 'Senior', industries: ['Fintech', 'Healthcare'], skills: ['Go'], education: 'BSc Computer Science', languages: ['English', 'Hebrew'], certifications: [] });
+    assert.deepEqual(cvDetails({ years: -3, industries: null }), { industries: [], skills: [], languages: [], certifications: [] });
+  });
+});

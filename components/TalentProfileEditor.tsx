@@ -60,8 +60,8 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   async function save(): Promise<boolean> {
     setBusy(true); setError(''); setNotice('');
     try {
-      const { version, headline, about, facts, hiddenFacts, experience, openTo, workModes, noGos } = profile;
-      const r = await saveTalentProfile({ version, headline, about, facts, hiddenFacts, experience, openTo, salary: { min: salaryMin.trim() ? Number(salaryMin) : null, currency }, locations: list(locationsText), workModes, noGos, employerDomains: list(domains) });
+      const { version, headline, about, facts, hiddenFacts, details, experience, openTo, workModes, noGos } = profile;
+      const r = await saveTalentProfile({ version, headline, about, facts, hiddenFacts, ...(details ? { details } : {}), experience, openTo, salary: { min: salaryMin.trim() ? Number(salaryMin) : null, currency }, locations: list(locationsText), workModes, noGos, employerDomains: list(domains) });
       if (r.error || !r.profile) { setError(r.error ?? 'Could not save.'); return false; }
       setProfile(r.profile); setSaved(r.profile);
       setDomains(r.profile.employerDomains.join(', ')); setLocationsText(r.profile.locations.join(', '));
@@ -88,8 +88,8 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   async function rewrite() {
     setBusy(true); setError('');
     try {
-      const { headline, about, experience, openTo } = profile;
-      const r = await writeSummary({ headline, about, experience, openTo });
+      const { headline, about, experience, openTo, details } = profile;
+      const r = await writeSummary({ headline, about, experience, openTo, ...(details ? { details } : {}) });
       if ('error' in r && r.error) setError(r.error);
       else if ('facts' in r) change({ facts: r.facts });
     } catch { setError('Could not write it. Try again, or write it yourself.'); }
@@ -229,6 +229,8 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
     ...(linkedinAvailable ? [{ name: 'LinkedIn', status: has('linkedin') ? 'Connected' : 'Confirms you are a real person', done: has('linkedin'), href: '/talent/auth/linkedin/start' }] : []),
   ];
   const visibleRoles = profile.experience.filter((r) => r.title.trim());
+  const d = profile.details;
+  const detailChips = d ? [d.years !== undefined ? `${d.years} years` : '', d.seniority ?? '', ...d.industries, d.leadership ?? '', d.education ?? '', ...d.languages, ...d.certifications].filter(Boolean) : [];
   const prefSummary = [
     saved.salary.min ? `${saved.salary.currency} ${saved.salary.min.toLocaleString('en-US')}+` : '',
     saved.workModes.map((m) => WORK_MODES.find((w) => w.mode === m)?.label).join(' · '),
@@ -254,6 +256,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       {sectionHead('Experience', 'Private. Your agent uses it to answer questions.', editBtn('experience'))}
       {editing === 'experience' ? profileFields : editing === 'import' ? experienceStep : <>
         {profile.headline && <p className="font-medium">{profile.headline}</p>}
+        {detailChips.length > 0 && <div className="flex flex-wrap gap-1.5">{detailChips.map((c) => <span key={c} className="pill text-[13px]">{c}</span>)}</div>}
         {visibleRoles.length
           ? <ul className="space-y-1 text-sm">{visibleRoles.slice(0, 5).map((r) => <li key={r.id} className="flex justify-between gap-3"><span className="truncate">{r.title}</span><span className="muted shrink-0">{[when(r.start), when(r.end) || (r.start ? 'Present' : '')].filter(Boolean).join(' – ')}</span></li>)}</ul>
           : <p className="muted text-sm">No roles yet.</p>}
