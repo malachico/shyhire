@@ -9,7 +9,7 @@ export function NavTabs({ tabs, dot }: { tabs: { href: string; label: string }[]
       const active = path === t.href || path.startsWith(`${t.href}/`);
       return <a key={t.href} href={t.href} aria-current={active ? 'page' : undefined} className={`relative py-1 ${active ? 'font-semibold' : 'muted hover:text-[var(--fg)]'}`}>
         {t.label}
-        {dot === t.href && <span aria-label="needs you" className="absolute -right-2.5 top-0.5 size-2 rounded-full bg-[var(--accent)]" />}
+        {dot === t.href && <span aria-label="needs you" className="absolute -right-2.5 top-0.5 size-2 rounded-full bg-[var(--sun)]" />}
         {active && <span className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-[var(--fg)]" />}
       </a>;
     })}

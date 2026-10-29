@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AppIcon } from '@/components/Brand';
 import { NavTabs } from '@/components/NavTabs';
 import { currentSession } from '@/lib/auth';
 import { switchMode } from '@/lib/actions/talent';
@@ -20,7 +21,7 @@ export default async function TalentLayout({ children }: { children: React.React
   return <div className="min-h-dvh">
     <header className="border-b border-[var(--border)] bg-[var(--surface)]">
       <nav aria-label="Main" className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-4 px-4">
-        <a href={tabs[0]!.href} className="text-sm font-semibold tracking-tight">Hireroom</a>
+        <a href={tabs[0]!.href} aria-label="Hireroom"><AppIcon /></a>
         <NavTabs tabs={tabs} dot={waiting ? '/talent/conversations' : undefined} />
         <details className="relative">
           <summary aria-label="Account menu" className="flex size-8 cursor-pointer list-none items-center justify-center rounded-full border border-[var(--border)] text-sm font-medium">{initial}</summary>

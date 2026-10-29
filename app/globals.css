@@ -1,32 +1,38 @@
 @import 'tailwindcss';
 
-/* Parly's light tokens (from the Parly web app), so Talent looks like part of the family. */
+/* Hireroom: ink and paper from the mark, one sunflower accent, night for the moment two sides match. */
 :root {
-  --bg: #f6f5f2;
+  --ink: #141414;
+  --sun: #F5B700;
+  --night: #22305A;
+  --bg: #FBF8F3;
   --surface: #ffffff;
-  --fg: #17161c;
-  --muted: #5e5b68;
-  --border: #e4e2dc;
-  --accent: #4338ca;
-  --accent-hover: #3730a3;
-  --accent-fg: #ffffff;
-  --accent-bg: #eef2ff;
+  --fg: #141414;
+  --muted: #6B6560;
+  --border: #E6DFD3;
+  --accent: #141414;
+  --accent-hover: #2b2b2b;
+  --accent-fg: #FBF8F3;
+  --accent-bg: #FFF1C2;
   --bad-fg: #a3262a;
   --bad-bg: #fef2f2;
 }
-body { background: var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 15px; }
-.btn-primary { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; padding: 0 1.25rem; border-radius: 10px; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif; font-size: 15px; }
+.btn-primary { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; padding: 0 1.25rem; border-radius: 14px; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 .btn-primary:hover { background: var(--accent-hover); }
-.btn { display: inline-flex; align-items: center; min-height: 40px; padding: 0 1rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
-.input { border-radius: 10px; border: 1px solid var(--border); background: var(--surface); padding: 0.625rem 0.75rem; }
+.btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 1rem; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); }
+.input { min-height: 46px; box-sizing: border-box; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); padding: 0.625rem 0.75rem; }
 
 .btn:disabled, .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
-.card { border: 1px solid var(--border); background: var(--surface); border-radius: 14px; padding: 1.25rem; }
+.card { border: 1px solid var(--border); background: var(--surface); border-radius: 18px; padding: 1.25rem; }
 .pill { display: inline-flex; align-items: center; gap: 0.35rem; border-radius: 999px; padding: 0.125rem 0.625rem; font-size: 12px; font-weight: 500; border: 1px solid var(--border); color: var(--muted); background: var(--surface); white-space: nowrap; }
-.pill-accent { border-color: transparent; background: var(--accent-bg); color: var(--accent); }
+.pill-accent { border-color: transparent; background: var(--sun); color: var(--ink); font-weight: 600; }
 .pill-good { border-color: transparent; background: #ecfdf3; color: #067647; }
 .muted { color: var(--muted); }
 .link { text-decoration: underline; text-underline-offset: 3px; }
 .field { display: block; font-size: 14px; font-weight: 500; }
 .field > .input, .field > select, .field > textarea { margin-top: 0.375rem; width: 100%; font-weight: 400; }
 .hint { margin-top: 0.375rem; font-size: 12px; color: var(--muted); font-weight: 400; }
+
+.display { font-family: var(--font-display), var(--font-sans), sans-serif; letter-spacing: -0.03em; }
+h1 { font-family: var(--font-display), var(--font-sans), sans-serif; letter-spacing: -0.03em; font-weight: 800; }

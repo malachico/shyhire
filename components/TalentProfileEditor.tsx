@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { Experience, ProfileDraft, TalentProfile, WorkMode } from '@/lib/talent';
 import { saveTalentProfile, setDiscoverable } from '@/lib/actions/talent';
 import { privacyLeaks } from '@/lib/privacy';
+import { Mark } from '@/components/Brand';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'ILS', 'CAD', 'AUD', 'CHF', 'SGD'] as const;
 const WORK_MODES: { mode: WorkMode; label: string }[] = [
@@ -145,11 +146,11 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
     <label className="field">No-gos<textarea className="input min-h-20" maxLength={1000} value={profile.noGos ?? ''} onChange={(e) => change({ noGos: e.target.value })} placeholder="No gambling, on-call at most a week a month" /></label>
   </fieldset>;
 
-  const preview = <section aria-label="What companies see" className="card">
-    <p className="muted text-xs font-medium uppercase tracking-wide">What companies see</p>
-    <p className="mt-2 font-semibold">{saved.alias || 'Candidate #…'}</p>
-    <p className="mt-1 text-sm leading-relaxed">{saved.publicSummary || profile.headline || 'Your anonymous summary appears here once you save.'}</p>
-    <p className="hint">No name, employers, links or private preferences.{onboarded && dirty && ' Save to update.'}</p>
+  const preview = <section aria-label="What companies see" className="rounded-[18px] bg-[var(--ink)] p-[18px] text-[var(--bg)]">
+    <p className="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--sun)]"><Mark size={30} flower={false} look="ahead" body="#3a3a3a" />What companies see</p>
+    <p className="mt-2 text-[17px] font-semibold">{saved.alias || 'Candidate #…'}</p>
+    <p className="mt-1 text-sm leading-relaxed text-[#DDD6CA]">{saved.publicSummary || profile.headline || 'Your anonymous summary appears here once you save.'}</p>
+    <p className="mt-2 text-xs text-[#A8A196]">No name, employers, links or private preferences.{onboarded && dirty && ' Save to update.'}</p>
   </section>;
 
   if (!onboarded) {
