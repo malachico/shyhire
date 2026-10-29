@@ -11,7 +11,7 @@ import {
   LINKEDIN_USERINFO_URL,
   TalentLinkedIn,
 } from '../lib/linkedin.ts';
-import { professionalDraft, Profiles } from '../lib/profiles.ts';
+import { Profiles } from '../lib/profiles.ts';
 import { createProfiles } from '../lib/talent.ts';
 
 function testPerson(name = 'Owner') {
@@ -42,30 +42,33 @@ describe('Talent professional profile generation', () => {
       }))) as typeof fetch,
     });
     const draft = await profiles.draft(person, { text: 'Private Name original CV private@example.test' });
-    assert.equal(draft.headline.includes('Backend engineer'), true);
-    assert.equal(draft.about.includes('Senior'), true);
-    assert.doesNotMatch(JSON.stringify(draft), /Private Name|Secret Employer|private@|https|identity.test/);
+    assert.equal(draft.headline, privateDraft.headline);
+    assert.equal(draft.about, privateDraft.about);
     const usage = await db.collection('talent_llm_usage').get();
     assert.equal(usage.size, 1);
     assert.equal(usage.docs[0]!.data().personId, person.id);
     assert.equal((await profiles.mine(person)).version, 0);
     const saved = await profiles.save(person, { version: 0, ...privateDraft, preferences: 'Remote only', openTo: 'Backend roles' });
-    const record = (await db.collection('profiles').doc(person.id).get()).data()!;
-    assert.doesNotMatch(JSON.stringify(record), /Private Name|Secret Employer|private@|https|identity.test|private-name/);
     assert.equal(saved.preferences, 'Remote only'); assert.equal(saved.openTo, 'Backend roles');
     assert.equal(saved.experience[0]!.source, 'self');
     assert.equal(saved.publicSummary.includes('4 full years'), true);
   });
 
-  it('uses verified GitHub technologies without fabricating experience or retaining identifiers', async () => {
+  it('has the AI write what companies see from the profile and verified data, and flags what would identify them', async () => {
     const db = testDb(), profiles = new Profiles(db), person = testPerson();
-    await profiles.verify(person.id, { id: 'github', source: 'github', label: 'Private Name', verifiedAt: new Date().toISOString(), data: { login: 'PrivateName', repositories: ['identifying-repo'], languages: ['Python', 'Private Employer'], mergedPublicPullRequests: 7 } });
+    await profiles.verify(person.id, { id: 'github', source: 'github', label: 'Private Name', verifiedAt: new Date().toISOString(), data: { login: 'PrivateName', repositories: ['identifying-repo'], languages: ['Python'], mergedPublicPullRequests: 7 } });
+    await profiles.verify(person.id, { id: 'linkedin', source: 'linkedin', label: 'x', verifiedAt: new Date().toISOString(), data: { name: 'Jane Private', email: 'jane@example.test', sub: 'li-1' } }, undefined, 'li-1');
+    const seen: Record<string, unknown>[] = [];
+    profiles.summarizer = async (_id, data) => { seen.push(data); return 'Jane is a senior Python engineer with 7 merged public PRs.'; };
+    const result = await profiles.summarize(person, { headline: 'Python engineer', experience: privateDraft.experience });
+    assert.match(result.summary, /senior Python/);
+    assert.deepEqual(result.leaks, ['your name']);
+    const sent = JSON.stringify(seen[0]);
+    assert.match(sent, /Python engineer/); assert.match(sent, /mergedPublicPullRequests/);
+    assert.doesNotMatch(sent, /"company"|PrivateName|identifying-repo|Jane Private|jane@example/);
     const draft = await profiles.draft(person, {});
-    assert.equal(draft.headline.includes('Python'), true); assert.deepEqual(draft.experience, []);
-    assert.doesNotMatch(JSON.stringify(await profiles.mine(person)), /PrivateName|identifying-repo|Private Employer/);
-    assert.doesNotMatch(draft.about, /employer|Senior|years/);
-    const unavailable = await profiles.draft(testPerson(), {});
-    assert.deepEqual(unavailable.experience, []);
+    assert.equal(draft.publicSummary, 'Jane is a senior Python engineer with 7 merged public PRs.');
+    assert.deepEqual(draft.experience, []);
   });
 
   it('processes PDFs transiently, validates their signature/size and saves no file', async () => {
@@ -82,9 +85,7 @@ describe('Talent professional profile generation', () => {
     await assert.rejects(profiles.draft(person, { text: 'x', pdf: pdf.toString('base64') }), /or one PDF/);
   });
 
-  it('does not invent duration from invalid dates or trust browser verification fields', async () => {
-    const draft = professionalDraft({ ...privateDraft, experience: [{ ...privateDraft.experience[0]!, end: 'private employer date' }], verified: [] });
-    assert.equal(draft.about.includes('full years'), false);
+  it('does not trust browser verification fields', async () => {
     const profiles = new Profiles(testDb()), person = testPerson();
     await assert.rejects(profiles.save(person, { version: 0, verified: [{ source: 'linkedin' }] }), /editable/);
   });

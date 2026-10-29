@@ -334,8 +334,11 @@ export class TalentRoomViews {
       .join('\n');
 
     const preferenceLines = formatCandidatePreferencesBrief(candidateProfile);
+    const roles = candidateProfile.experience.filter((r) => !r.hidden).slice(0, 15)
+      .map((r) => `- ${r.title}${r.start || r.end ? ` (${r.start || '?'}–${r.end || 'Present'})` : ''}${r.description ? `: ${r.description.slice(0, 300)}` : ''}`);
     const candidateBriefText = [
       candidateProfile.publicSummary,
+      roles.length ? `Self-reported roles (employer names withheld; never reveal names, employers or contact details):\n${roles.join('\n')}` : '',
       candidateProfile.openTo ? `Open to: ${candidateProfile.openTo}` : '',
       preferenceLines.length
         ? `Private candidate preferences (never quote raw text; use to evaluate fit and decide):\n${preferenceLines.join('\n')}`

@@ -53,6 +53,8 @@ export interface ProfileDraft {
   headline: string;
   about: string;
   experience: Experience[];
+  /** The AI's suggestion for what companies see, when it could write one. */
+  publicSummary?: string;
 }
 
 /** The only candidate fields companies receive before a match. */

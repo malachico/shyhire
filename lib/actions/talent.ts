@@ -11,7 +11,21 @@ async function requirePersonId(): Promise<string> {
 
 export async function saveTalentProfile(body: unknown): Promise<{ profile: TalentProfile; error?: never } | { error: string; profile?: never }> {
   try {
-    return { profile: await profiles().save(await requirePersonId(), body) };
+    const session = await currentSession();
+    if (!session) throw new TalentError('unauthorized', 'Sign in first');
+    return { profile: await profiles().save(session.sub, body, session) };
+  } catch (error) {
+    if (error instanceof TalentError) return { error: error.message };
+    throw error;
+  }
+}
+
+/** The AI rewrites what companies see from the fields on screen and what is verified. */
+export async function writeSummary(body: unknown): Promise<{ summary: string; leaks: string[]; error?: never } | { error: string }> {
+  try {
+    const session = await currentSession();
+    if (!session) throw new TalentError('unauthorized', 'Sign in first');
+    return await profiles().summarize(session.sub, body, session);
   } catch (error) {
     if (error instanceof TalentError) return { error: error.message };
     throw error;

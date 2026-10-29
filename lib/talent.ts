@@ -1,6 +1,6 @@
 import type { Firestore } from '@google-cloud/firestore';
 import { db, DEFAULT_GCP_PROJECT_ID, gcpAccessToken } from './db.ts';
-import { firestoreLlmMeter, Profiles, vertexProfileImporter } from './profiles.ts';
+import { firestoreLlmMeter, Profiles, vertexProfileImporter, vertexSummaryWriter } from './profiles.ts';
 import { noticeMailer, WorkEmailVerification } from './workEmail.ts';
 
 export type { CandidateCard, CandidateSearch, Experience, ProfileDraft, SalaryPreference, TalentProfile, Verification, WorkMode } from './types.ts';
@@ -20,7 +20,7 @@ export function createProfiles(
 ): Profiles {
   const instance = new Profiles(store);
   if (importerOpts || profileImportConfigured()) {
-    instance.importer = vertexProfileImporter({
+    const opts = {
       project: importerOpts?.project ?? process.env.VERTEX_PROJECT ?? process.env.GCP_PROJECT_ID ?? DEFAULT_GCP_PROJECT_ID,
       location: importerOpts?.location ?? process.env.VERTEX_LOCATION ?? 'global',
       model: importerOpts?.model ?? process.env.VERTEX_MODEL ?? 'gemini-2.5-flash',
@@ -31,7 +31,9 @@ export function createProfiles(
       meter: importerOpts?.meter ?? firestoreLlmMeter(store),
       accessToken: importerOpts?.accessToken ?? gcpAccessToken,
       ...(importerOpts?.fetchImpl ? { fetchImpl: importerOpts.fetchImpl } : {}),
-    });
+    };
+    instance.importer = vertexProfileImporter(opts);
+    instance.summarizer = vertexSummaryWriter(opts);
   }
   return instance;
 }

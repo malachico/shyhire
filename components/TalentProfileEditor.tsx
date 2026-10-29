@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import type { Experience, ProfileDraft, TalentProfile, WorkMode } from '@/lib/talent';
-import { saveTalentProfile, setDiscoverable } from '@/lib/actions/talent';
+import { saveTalentProfile, setDiscoverable, writeSummary } from '@/lib/actions/talent';
 import { privacyLeaks } from '@/lib/privacy';
 import { Mark } from '@/components/Brand';
 
@@ -25,8 +25,8 @@ type Props = {
 
 /**
  * The candidate's profile. A new one goes through three steps (experience, check it, what matters); a saved one
- * shows what companies see, the connections, and the same fields to edit. The anonymous summary companies get is
- * computed on the server from fixed lists, never from this text.
+ * shows what companies see, the connections, and the same fields to edit. What companies see is free text the AI
+ * writes from the profile and what is verified; the person can edit it, and the server refuses it if it names them.
  */
 export function TalentProfileEditor({ initial, me, error: initialError, githubAvailable = true, linkedinAvailable = true, workEmailAvailable = false, importAvailable = true }: Props) {
   const [profile, setProfile] = useState(initial);
@@ -50,13 +50,13 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
     if (on) s.add(mode); else s.delete(mode);
     change({ workModes: WORK_MODES.map((w) => w.mode).filter((m) => s.has(m)) });
   };
-  const leaks = privacyLeaks([profile.headline, profile.about, ...profile.experience.map((r) => r.description)].join('\n'), me, list(domains));
+  const leaks = privacyLeaks(profile.publicSummary, me, list(domains)); // ponytail: employer names are checked on save
 
   async function save(): Promise<boolean> {
     setBusy(true); setError(''); setNotice('');
     try {
-      const { version, headline, about, experience, openTo, workModes, noGos } = profile;
-      const r = await saveTalentProfile({ version, headline, about, experience, openTo, salary: { min: salaryMin.trim() ? Number(salaryMin) : null, currency }, locations: list(locationsText), workModes, noGos, employerDomains: list(domains) });
+      const { version, headline, about, publicSummary, experience, openTo, workModes, noGos } = profile;
+      const r = await saveTalentProfile({ version, headline, about, publicSummary, experience, openTo, salary: { min: salaryMin.trim() ? Number(salaryMin) : null, currency }, locations: list(locationsText), workModes, noGos, employerDomains: list(domains) });
       if (r.error || !r.profile) { setError(r.error ?? 'Could not save.'); return false; }
       setProfile(r.profile); setSaved(r.profile);
       setDomains(r.profile.employerDomains.join(', ')); setLocationsText(r.profile.locations.join(', '));
@@ -77,6 +77,17 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
       if (r.error) setError(r.error);
       else if (r.draft) { change(r.draft); setStep(2); }
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not read it. Nothing was changed.'); }
+    finally { setBusy(false); }
+  }
+
+  async function rewrite() {
+    setBusy(true); setError('');
+    try {
+      const { headline, about, experience, openTo } = profile;
+      const r = await writeSummary({ headline, about, experience, openTo });
+      if ('error' in r && r.error) setError(r.error);
+      else if ('summary' in r) change({ publicSummary: r.summary });
+    } catch { setError('Could not write it. Try again, or write it yourself.'); }
     finally { setBusy(false); }
   }
 
@@ -129,7 +140,6 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
     <button type="button" className="btn text-sm" disabled={profile.experience.length >= 40} onClick={() => change({ experience: [...profile.experience, { id: crypto.randomUUID(), title: '', company: '', start: '', end: '', description: '', hidden: false, source: 'self' }] })}>Add a role</button>
     <label className="field">Open to<input className="input" maxLength={500} value={profile.openTo} onChange={(e) => change({ openTo: e.target.value })} placeholder="Full-time, contract" /></label>
     <label className="field">Never show me to<input className="input" value={domains} onChange={(e) => { setDomains(e.target.value); setNotice(''); }} placeholder="current-employer.com" /><span className="hint block">Companies on these domains, and your verified work domain, never see you.</span></label>
-    {!!leaks.length && <p role="alert" className="rounded-lg bg-[#fffaeb] p-3 text-sm text-[#93370d]">Your text mentions {leaks.join(', ')}. Companies only see an anonymous summary, but remove it to be safe.</p>}
   </fieldset>;
 
   const preferenceFields = <fieldset disabled={busy} className="space-y-4">
@@ -149,8 +159,12 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
   const preview = <section aria-label="What companies see" className="rounded-[18px] bg-[var(--ink)] p-[18px] text-[var(--bg)]">
     <p className="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--sun)]"><Mark size={30} flower={false} look="ahead" body="#3a3a3a" />What companies see</p>
     <p className="mt-2 text-[17px] font-semibold">{saved.alias || 'Candidate #…'}</p>
-    <p className="mt-1 text-sm leading-relaxed text-[#DDD6CA]">{saved.publicSummary || profile.headline || 'Your anonymous summary appears here once you save.'}</p>
-    <p className="mt-2 text-xs text-[#A8A196]">No name, employers, links or private preferences.{onboarded && dirty && ' Save to update.'}</p>
+    <textarea aria-label="What companies see" className="mt-1 block min-h-28 w-full resize-y rounded-lg border border-[#3a3a3a] bg-transparent p-2 text-sm leading-relaxed text-[#DDD6CA] placeholder:text-[#8a847a]" maxLength={1500} disabled={busy} value={profile.publicSummary} onChange={(e) => change({ publicSummary: e.target.value })} placeholder="A few sentences about your work. Leave it empty and we write a basic one, or let the AI write it." />
+    {!!leaks.length && <p role="alert" className="mt-2 rounded-lg bg-[#fffaeb] p-2 text-xs text-[#93370d]">This mentions {leaks.join(', ')}. Companies see this text, so remove it before saving.</p>}
+    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+      <p className="text-xs text-[#A8A196]">No name, employers, links or private preferences.{onboarded && dirty && ' Save to update.'}</p>
+      {importAvailable && <button type="button" className="text-xs font-semibold text-[var(--sun)] underline" disabled={busy} onClick={() => void rewrite()}>{busy ? 'Writing…' : 'Rewrite from my data'}</button>}
+    </div>
   </section>;
 
   if (!onboarded) {

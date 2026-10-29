@@ -29,7 +29,13 @@ describe('Talent owner profiles', () => {
     assert.doesNotMatch(profile.publicSummary, /Private Name|Secret Employer|identity|example|50000/);
     assert.equal(profile.preferences, 'Minimum salary 50000; no travel');
     await assert.rejects(profiles.save(person, { version: 1, verified: [verification] }), /editable/);
-    await assert.rejects(profiles.save(person, { version: 1, publicSummary: 'injected' }), /editable/);
+    await assert.rejects(profiles.save(person, { version: 1, publicSummary: 'Private Name builds React apps' }, { name: 'Private Name' }), /mentions your name/);
+    await assert.rejects(profiles.save(person, { version: 1, publicSummary: 'Built React apps at Secret Employer' }), /mentions Secret Employer/);
+    await assert.rejects(profiles.save(person, { version: 1, publicSummary: 'Mail them: private@example.test' }), /email/);
+    const written = await profiles.save(person, { version: 1, publicSummary: 'They build React and TypeScript apps.' }, { name: 'Private Name' });
+    assert.equal(written.publicSummary, 'They build React and TypeScript apps.');
+    assert.equal(written.about, 'Contact private@example.test for TypeScript and React work');
+    await assert.rejects(profiles.save(person, { version: 2, alias: 'x' }), /editable/);
     await assert.rejects(profiles.save(person, { version: 0, about: 'stale' }), /changed/);
     await profiles.verify(person.id, verification);
     const verified = await profiles.mine(person);
