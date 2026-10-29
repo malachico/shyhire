@@ -101,7 +101,7 @@ export class TalentLinkedIn {
     const name = rawName ? rawName.slice(0, 120) : undefined;
     const rawEmail = typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';
     const email =
-      rawEmail && rawEmail.includes('@') && user.email_verified !== false
+      rawEmail && rawEmail.includes('@') && user.email_verified === true
         ? rawEmail.slice(0, 254)
         : undefined;
     const data: Record<string, string> = {};

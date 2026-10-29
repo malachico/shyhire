@@ -202,6 +202,17 @@ describe('Talent LinkedIn OpenID Connect account connection', () => {
     assert.equal(identity.name, 'Alex Dev');
     assert.equal(identity.email, undefined);
     assert.deepEqual(identity.verification.data, { name: 'Alex Dev' });
+
+    const missingVerifiedFlag = new TalentLinkedIn(
+      { clientId: 'id', clientSecret: 'secret', webUrl: 'https://talent.parly.dev' },
+      (async (url: string | URL | Request) =>
+        String(url) === LINKEDIN_TOKEN_URL
+          ? new Response(JSON.stringify({ access_token: 'tok' }))
+          : new Response(JSON.stringify({ sub: 'li-sub-2', name: 'Alex Dev', email: 'missing@example.test' }))) as typeof fetch,
+    );
+    const missingFlagIdentity = await missingVerifiedFlag.exchange('code');
+    assert.equal(missingFlagIdentity.email, undefined);
+    assert.deepEqual(missingFlagIdentity.verification.data, { name: 'Alex Dev' });
   });
 
   it('atomically rejects another profile claiming the same provider subject for both LinkedIn and GitHub', async () => {
