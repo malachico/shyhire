@@ -109,7 +109,7 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
       </div>
     </> : <p className="muted text-sm">CV import isn&apos;t available right now. Fill in your profile by hand.</p>}
     <p className="muted text-sm">
-      {githubAvailable && <><a className="link" href="/talent/auth/github/start">Connect GitHub</a> to add your public activity · </>}
+      {githubAvailable && <><a className="link" href="/talent/auth/github/start">Connect GitHub</a> to add your public activity (personal account only) · </>}
       <button className="underline" onClick={() => setStep(2)}>Fill it in by hand</button>
     </p>
   </section>;
@@ -188,6 +188,7 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
           {'href' in c && c.href && <a className="btn min-h-9 text-sm" href={c.href}>{c.done ? 'Refresh' : 'Connect'}</a>}
         </li>)}
       </ul>
+      <p className="hint mt-2">Connect only personal accounts. Never connect a GitHub or LinkedIn account your employer owns, and don’t upload company documents.</p>
     </section>
     <details><summary className="cursor-pointer font-semibold">Update from a CV or LinkedIn PDF</summary><div className="mt-4">{experienceStep}</div></details>
     <details><summary className="cursor-pointer font-semibold">Edit profile</summary><div className="mt-4">{profileFields}</div></details>
