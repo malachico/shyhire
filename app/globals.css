@@ -10,9 +10,13 @@
   --accent: #4338ca;
   --accent-hover: #3730a3;
   --accent-fg: #ffffff;
+  --accent-bg: #eef2ff;
   --bad-fg: #a3262a;
+  --bad-bg: #fef2f2;
 }
 body { background: var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 15px; }
 .btn-primary { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; padding: 0 1.25rem; border-radius: 10px; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn { display: inline-flex; align-items: center; min-height: 40px; padding: 0 1rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
+.input { border-radius: 10px; border: 1px solid var(--border); background: var(--surface); padding: 0.625rem 0.75rem; }
+

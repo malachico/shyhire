@@ -3,6 +3,8 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { startSession } from '@/lib/auth';
 import { appUrl, GITHUB_FLOW_COOKIE, githubAccount, githubConfigured } from '@/lib/github';
+import { TalentError } from '@/lib/profiles';
+import { profiles } from '@/lib/talent';
 
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
@@ -18,8 +20,11 @@ export async function GET(request: Request) {
     if (!flow?.state || !flow.verifier || !code || !same(flow.state, state)) throw new Error('Invalid sign-in state');
     const account = await githubAccount(code, flow.verifier);
     await startSession({ githubId: account.id, login: account.login });
+    await profiles().verify(String(account.id), account.verification);
     return NextResponse.redirect(`${appUrl()}/talent/profile`);
-  } catch {
-    return NextResponse.redirect(`${appUrl()}/?error=${encodeURIComponent('GitHub sign-in failed. Please try again.')}`);
+  } catch (error) {
+    const msg = error instanceof TalentError ? error.message : 'GitHub sign-in failed. Please try again.';
+    return NextResponse.redirect(`${appUrl()}/?error=${encodeURIComponent(msg)}`);
   }
 }
+

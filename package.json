@@ -1,6 +1,7 @@
 {
   "name": "parly-talent",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --port 3100",
     "build": "next build",
@@ -9,13 +10,18 @@
     "test": "node --test --experimental-strip-types test/*.test.ts"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^9.4.0",
+    "@vercel/oidc": "^4.0.4",
+    "google-auth-library": "^11.3.2",
     "next": "^16.3.8",
+    "nodemailer": "^10.2.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.20.5",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "tailwindcss": "^4.3.3",
