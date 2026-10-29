@@ -1,10 +1,40 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { test } from 'node:test';
+import { gcpExternalAccountClient } from '../lib/db.ts';
 import { signSession, verifySession } from '../lib/session.ts';
 import { verifyParlySignature } from '../lib/webhooks.ts';
 
 const secret = 'x'.repeat(40);
+
+test('gcpExternalAccountClient supplies the raw Vercel OIDC token without exchanging it for the IAM pool audience', async () => {
+  const fakePayload = Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600, aud: 'https://vercel.com/test' })).toString('base64url');
+  const fakeJwt = `eyJhbGciOiJSUzI1NiJ9.${fakePayload}.sig`;
+  const prevToken = process.env.VERCEL_OIDC_TOKEN;
+  const prevNum = process.env.GCP_PROJECT_NUMBER;
+  const prevSa = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
+  process.env.VERCEL_OIDC_TOKEN = fakeJwt;
+  process.env.GCP_PROJECT_NUMBER = '123456';
+  process.env.GCP_SERVICE_ACCOUNT_EMAIL = 'test@example.iam.gserviceaccount.com';
+  try {
+    const client = gcpExternalAccountClient() as unknown as {
+       subjectTokenSupplier: { getSubjectToken: (ctx: { audience: string; subjectTokenType: string }) => Promise<string> };
+    };
+    assert.ok(client);
+    const token = await client.subjectTokenSupplier.getSubjectToken({
+      audience: '//iam.googleapis.com/projects/123456/locations/global/workloadIdentityPools/vercel/providers/vercel',
+      subjectTokenType: 'urn:ietf:params:oauth:token-type:jwt',
+    });
+    assert.equal(token, fakeJwt);
+  } finally {
+    if (prevToken === undefined) delete process.env.VERCEL_OIDC_TOKEN;
+    else process.env.VERCEL_OIDC_TOKEN = prevToken;
+    if (prevNum === undefined) delete process.env.GCP_PROJECT_NUMBER;
+    else process.env.GCP_PROJECT_NUMBER = prevNum;
+    if (prevSa === undefined) delete process.env.GCP_SERVICE_ACCOUNT_EMAIL;
+    else process.env.GCP_SERVICE_ACCOUNT_EMAIL = prevSa;
+  }
+});
 
 test('a session cookie verifies, and a forged or old one does not', () => {
   const value = signSession({ githubId: 7, login: 'dev', issuedAt: Date.now() }, secret);

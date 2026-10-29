@@ -19,7 +19,8 @@ export function gcpExternalAccountClient(): BaseExternalAccountClient | undefine
       token_url: 'https://sts.googleapis.com/v1/token',
       service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
       subject_token_supplier: {
-        getSubjectToken: getVercelOidcToken,
+        // Ignore ExternalAccountSupplierContext (which carries the IAM pool `audience`) so `@vercel/oidc` returns the raw Vercel OIDC token rather than exchanging it.
+        getSubjectToken: () => getVercelOidcToken(),
       },
     }) ?? undefined
   );
