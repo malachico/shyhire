@@ -13,7 +13,7 @@ const room = (over: Partial<StoredTalentRoom> = {}): StoredTalentRoom => ({
   createdAt: '2026-10-29T05:00:00.000Z', updatedAt: '2026-10-29T05:00:00.000Z', ...over,
 } as StoredTalentRoom);
 
-describe('Hireroom UI support', () => {
+describe('Shyhire UI support', () => {
   it('a paused candidate is not found in search or for a new room, and saving keeps the pause', async () => {
     const db = testDb();
     const profiles = new Profiles(db);

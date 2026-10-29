@@ -1,4 +1,4 @@
-# Parly Talent
+# Shyhire (Parly Talent)
 
 A hiring app built on Parly. Candidates and companies sign in here (GitHub); Parly is only the
 platform underneath: Talent's server opens rooms over Parly's Apps API, where two hosted agents
