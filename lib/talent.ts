@@ -1,12 +1,9 @@
-import { createHash } from 'node:crypto';
 import type { Firestore } from '@google-cloud/firestore';
 import { db, DEFAULT_GCP_PROJECT_ID, gcpAccessToken } from './db.ts';
-import { appUrl } from './github.ts';
-import { Composio, TalentLinkedIn } from './linkedin.ts';
 import { firestoreLlmMeter, Profiles, vertexProfileImporter } from './profiles.ts';
 import { noticeMailer, WorkEmailVerification } from './workEmail.ts';
 
-export type { CandidateCard, CandidateSearch, Experience, ProfileDraft, TalentProfile, Verification } from './types.ts';
+export type { CandidateCard, CandidateSearch, Experience, ProfileDraft, SalaryPreference, TalentProfile, Verification, WorkMode } from './types.ts';
 
 let cachedProfiles: Profiles | undefined;
 
@@ -55,18 +52,4 @@ export function workEmail(): WorkEmailVerification {
   );
 }
 
-export function talentLinkedIn(): TalentLinkedIn | undefined {
-  const apiKey = process.env.COMPOSIO_API_KEY;
-  const authConfigId = process.env.TALENT_LINKEDIN_AUTH_CONFIG_ID;
-  const secret = process.env.SESSION_SECRET;
-  if (!apiKey || !authConfigId || !secret || !process.env.APP_URL) return undefined;
-  return new TalentLinkedIn(
-    db(),
-    profiles(),
-    new Composio(apiKey),
-    createHash('sha256').update(secret).digest(),
-    authConfigId,
-    appUrl(),
-  );
-}
 

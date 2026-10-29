@@ -12,7 +12,7 @@ export default async function CandidateRequestRoomPage({ params }: { params: Pro
   const { id } = await params;
   let room: TalentRoomDetail;
   try {
-    room = await roomViews().getRoomView(String(session.githubId), id);
+    room = await roomViews().getRoomView(session.sub, id);
   } catch (e) {
     if (e instanceof TalentError && e.code === 'not_found') notFound();
     if (e instanceof TalentError) {

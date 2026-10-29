@@ -13,7 +13,7 @@ export default async function CandidateRequestsPage() {
   let requests: CandidateRequestSummary[] = [];
   let error: string | undefined;
   try {
-    requests = await roomViews().listCandidateRequests(String(session.githubId));
+    requests = await roomViews().listCandidateRequests(session.sub);
   } catch (e) {
     if (!(e instanceof TalentError)) throw e;
     error = e.message;

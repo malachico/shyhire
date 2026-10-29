@@ -36,16 +36,21 @@ test('gcpExternalAccountClient supplies the raw Vercel OIDC token without exchan
   }
 });
 
-test('a session cookie verifies, and a forged or old one does not', () => {
-  const value = signSession({ githubId: 7, login: 'dev', issuedAt: Date.now() }, secret);
-  assert.equal(verifySession(value, secret)?.login, 'dev');
+test('a Google session cookie verifies, and a forged, old, or legacy GitHub-only cookie does not', () => {
+  const value = signSession({ sub: 'google-sub-42', email: 'dev@example.com', name: 'Dev', issuedAt: Date.now() }, secret);
+  assert.equal(verifySession(value, secret)?.sub, 'google-sub-42');
+  assert.equal(verifySession(value, secret)?.email, 'dev@example.com');
   assert.equal(verifySession(value, 'y'.repeat(40)), undefined);
   const [payload] = value.split('.');
-  const forged = Buffer.from(JSON.stringify({ githubId: 1, login: 'admin', issuedAt: Date.now() })).toString('base64url');
+  const forged = Buffer.from(JSON.stringify({ sub: 'admin-sub', email: 'admin@example.com', issuedAt: Date.now() })).toString('base64url');
   assert.equal(verifySession(`${forged}.${value.split('.')[1]}`, secret), undefined);
   assert.equal(verifySession(`${payload}`, secret), undefined);
-  const old = signSession({ githubId: 7, login: 'dev', issuedAt: Date.now() - 31 * 24 * 3600 * 1000 }, secret);
+  const old = signSession({ sub: 'google-sub-42', issuedAt: Date.now() - 31 * 24 * 3600 * 1000 }, secret);
   assert.equal(verifySession(old, secret), undefined);
+  // Legacy GitHub-only session payload (without Google `sub`) must not verify
+  const legacyPayload = Buffer.from(JSON.stringify({ githubId: 7, login: 'dev', issuedAt: Date.now() })).toString('base64url');
+  const legacySig = createHmac('sha256', secret).update(legacyPayload).digest('base64url');
+  assert.equal(verifySession(`${legacyPayload}.${legacySig}`, secret), undefined);
 });
 
 test("Parly's webhook signature verifies; a tampered body, wrong secret or stale timestamp does not", () => {

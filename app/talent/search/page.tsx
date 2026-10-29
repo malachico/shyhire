@@ -13,7 +13,7 @@ export default async function TalentSearch({ searchParams }: { searchParams: Pro
   const q = Array.isArray(params.q) ? params.q[0] ?? '' : params.q ?? '';
   let results: CandidateSearch | undefined, error: string | undefined;
   try {
-    results = await profiles().search(String(session.githubId), q);
+    results = await profiles().search(session.sub, q);
   } catch (e) {
     if (!(e instanceof TalentError)) throw e;
     error = e.message;

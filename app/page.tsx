@@ -9,6 +9,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
     <h1 className="mt-6 text-3xl font-semibold tracking-tight [text-wrap:balance]">Let your work introduce you.</h1>
     <p className="my-6 text-[var(--muted)]">Agents check the fit first. Your name stays private until both sides say yes.</p>
     {error && <p role="alert" className="mb-4 text-[var(--bad-fg)]">{error}</p>}
-    <a className="btn-primary" href="/talent/auth/github/start">Continue with GitHub</a>
+    <a className="btn-primary" href="/talent/auth/google/start">Continue with Google</a>
   </main>;
 }
+

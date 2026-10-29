@@ -16,15 +16,12 @@ check the fit for their sides. Parly never learns who the people are: it sees an
 
 ## Sign-in
 
-GitHub (the "Parly Talent" GitHub App), OAuth with state and PKCE; the GitHub token is used once and
-never stored. The session is a signed, HttpOnly, host-only cookie holding the GitHub id and login.
-Callback: `<APP_URL>/talent/auth/github/callback` (registered on the GitHub app as
-`https://talent.parly.dev/talent/auth/github/callback`).
+Google OAuth 2.0 with state and PKCE; the Google token is used once to read OpenID userinfo (`sub`, `email`, `name`) and never stored. The session is a signed, HttpOnly, host-only cookie holding the Google `sub` (which serves as the person's id in Talent).
+Callback: `<APP_URL>/talent/auth/google/callback` (registered on the Google OAuth client as `https://parly-talent.vercel.app/talent/auth/google/callback`).
 
 ## Environment
 
-See `.env.example`: `APP_URL`, `SESSION_SECRET` (32+ chars), `TALENT_GITHUB_CLIENT_ID`,
-`TALENT_GITHUB_CLIENT_SECRET`, `PARLY_API_URL`, `PARLY_API_KEY`, `PARLY_WEBHOOK_SECRET`.
+See `.env.example`: `APP_URL`, `SESSION_SECRET` (32+ chars), `TALENT_GOOGLE_CLIENT_ID`, `TALENT_GOOGLE_CLIENT_SECRET`, `TALENT_GITHUB_CLIENT_ID`, `TALENT_GITHUB_CLIENT_SECRET`, `TALENT_LINKEDIN_CLIENT_ID`, `TALENT_LINKEDIN_CLIENT_SECRET`, `PARLY_API_URL`, `PARLY_API_KEY`, `PARLY_WEBHOOK_SECRET`.
 
 ## Develop
 
@@ -40,5 +37,5 @@ npm run build
 - `lib/db.ts`: Firestore in Talent's own GCP project (`parly-talent-0a7c87`). On Vercel production it authenticates via Vercel OIDC + GCP Workload Identity Federation (`@vercel/oidc` + `ExternalAccountClient`); locally and in tests it uses `FIRESTORE_EMULATOR_HOST`.
 - `lib/profiles.ts`: candidate profiles, professional-only normalization (`professionalDraft`, `publicSummary`), transient CV/PDF draft extraction, and anonymous candidate search (`search`).
 - `lib/roomViews.ts`: company rooms (`/talent/rooms`, `/talent/rooms/[id]`) and candidate requests (`/talent/requests`, `/talent/requests/[id]`), deriving the viewer's side (`company` or `candidate`) server-side from `talent_rooms/{parlyRoomId}` before loading live room messages/documents or calling `parly.decide` and `parly.approve`.
-- `lib/github.ts`, `lib/workEmail.ts`, `lib/linkedin.ts`: GitHub public activity extraction, private one-time code work-email verification, and LinkedIn account connection via Composio.
+- `lib/github.ts`, `lib/workEmail.ts`, `lib/linkedin.ts`: GitHub public activity extraction, private one-time code work-email verification, and direct LinkedIn OpenID Connect account connection.
 

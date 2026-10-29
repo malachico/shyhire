@@ -14,7 +14,15 @@ export interface Verification {
   source: 'github' | 'linkedin' | 'work-email' | 'stripe' | 'vercel';
   label: string;
   verifiedAt: string;
+  subject?: string;
   data: Record<string, string | number | boolean | string[]>;
+}
+
+export type WorkMode = 'remote' | 'hybrid' | 'onsite';
+
+export interface SalaryPreference {
+  min?: number;
+  currency: string;
 }
 
 export interface TalentProfile {
@@ -28,6 +36,12 @@ export interface TalentProfile {
   verified: Verification[];
   openTo: string;
   preferences: string;
+  salary: SalaryPreference;
+  salaryMin?: number;
+  salaryCurrency: string;
+  locations: string[];
+  workModes: WorkMode[];
+  noGos: string;
   employerDomains: string[];
   version: number;
   updatedAt: string;

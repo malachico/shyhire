@@ -1,9 +1,81 @@
 import { randomUUID } from 'node:crypto';
 import { FieldValue, type Firestore, type Transaction } from '@google-cloud/firestore';
 import { GoogleAuth } from 'google-auth-library';
-import type { CandidateCard, Experience, ProfileDraft, TalentCaller, TalentProfile, Verification } from './types.ts';
+import type { CandidateCard, Experience, ProfileDraft, SalaryPreference, TalentCaller, TalentProfile, Verification, WorkMode } from './types.ts';
 
-export type { CandidateCard, CandidateSearch, Experience, ProfileDraft, TalentCaller, TalentProfile, Verification } from './types.ts';
+export type { CandidateCard, CandidateSearch, Experience, ProfileDraft, SalaryPreference, TalentCaller, TalentProfile, Verification, WorkMode } from './types.ts';
+
+export const WORK_MODES: readonly WorkMode[] = ['remote', 'hybrid', 'onsite'];
+
+function parseSalaryMin(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const num = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
+  if (!Number.isInteger(num) || num <= 0 || num > 10_000_000) {
+    throw new TalentError('invalid', 'Minimum salary must be a positive whole number up to 10,000,000');
+  }
+  return num;
+}
+
+function parseSalaryCurrency(raw: unknown): string {
+  if (raw === undefined || raw === null || raw === '') return 'USD';
+  if (typeof raw !== 'string') throw new TalentError('invalid', 'Currency must be a 3-letter code such as USD');
+  const code = raw.trim().toUpperCase();
+  if (!code) return 'USD';
+  if (!/^[A-Z]{3}$/.test(code)) throw new TalentError('invalid', 'Currency must be a 3-letter code such as USD, EUR or GBP');
+  return code;
+}
+
+function parseWorkModes(raw: unknown): WorkMode[] {
+  if (!Array.isArray(raw) || raw.length > 3) throw new TalentError('invalid', 'workModes must be a list of remote, hybrid or onsite');
+  for (const item of raw) {
+    if (item !== 'remote' && item !== 'hybrid' && item !== 'onsite') {
+      throw new TalentError('invalid', 'workModes may only include remote, hybrid and onsite');
+    }
+  }
+  return WORK_MODES.filter((mode) => raw.includes(mode));
+}
+
+export function normalizeProfile(personId: string, raw?: Partial<TalentProfile>): TalentProfile {
+  const min =
+    typeof raw?.salary?.min === 'number' && Number.isInteger(raw.salary.min) && raw.salary.min > 0
+      ? raw.salary.min
+      : typeof raw?.salaryMin === 'number' && Number.isInteger(raw.salaryMin) && raw.salaryMin > 0
+        ? raw.salaryMin
+        : undefined;
+  const currency =
+    typeof raw?.salary?.currency === 'string' && /^[A-Z]{3}$/.test(raw.salary.currency.trim().toUpperCase())
+      ? raw.salary.currency.trim().toUpperCase()
+      : typeof raw?.salaryCurrency === 'string' && /^[A-Z]{3}$/.test(raw.salaryCurrency.trim().toUpperCase())
+        ? raw.salaryCurrency.trim().toUpperCase()
+        : 'USD';
+  const locations = Array.isArray(raw?.locations)
+    ? [...new Set(raw.locations.filter((v): v is string => typeof v === 'string').map((v) => v.trim()).filter(Boolean))]
+    : [];
+  const workModes = Array.isArray(raw?.workModes)
+    ? WORK_MODES.filter((m) => raw.workModes!.includes(m))
+    : [];
+  return {
+    ...(raw?.searchable ? { searchable: true } : {}),
+    personId: raw?.personId || personId,
+    alias: typeof raw?.alias === 'string' ? raw.alias : '',
+    publicSummary: typeof raw?.publicSummary === 'string' ? raw.publicSummary : '',
+    headline: typeof raw?.headline === 'string' ? raw.headline : '',
+    about: typeof raw?.about === 'string' ? raw.about : '',
+    experience: Array.isArray(raw?.experience) ? raw.experience : [],
+    verified: Array.isArray(raw?.verified) ? raw.verified : [],
+    openTo: typeof raw?.openTo === 'string' ? raw.openTo : '',
+    preferences: typeof raw?.preferences === 'string' ? raw.preferences : '',
+    salary: min !== undefined ? { min, currency } : { currency },
+    ...(min !== undefined ? { salaryMin: min } : {}),
+    salaryCurrency: currency,
+    locations,
+    workModes,
+    noGos: typeof raw?.noGos === 'string' ? raw.noGos : '',
+    employerDomains: Array.isArray(raw?.employerDomains) ? raw.employerDomains : [],
+    version: typeof raw?.version === 'number' ? raw.version : 0,
+    updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : '',
+  };
+}
 
 export type ErrorCode = 'invalid' | 'unauthorized' | 'forbidden' | 'not_found' | 'conflict' | 'rate_limited' | 'unsupported' | 'unavailable';
 const STATUS: Record<ErrorCode, number> = { invalid: 400, unauthorized: 401, forbidden: 403, not_found: 404, conflict: 409, rate_limited: 429, unsupported: 501, unavailable: 503 };
@@ -152,8 +224,13 @@ function professionalVerification(item: Verification): Verification {
       const count = item.data[key]; if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) data[key] = count;
     }
     data.languages = technologies(Array.isArray(item.data.languages) ? item.data.languages.join(' ') : '');
-  } else if (item.source === 'work-email' && typeof item.data.domain === 'string') data.domain = item.data.domain;
-  return { id: item.source === 'work-email' ? `work-email:${data.domain}` : item.source, source: item.source, label: `${item.source === 'github' ? 'GitHub activity' : item.source === 'linkedin' ? 'LinkedIn account connected' : item.source === 'work-email' ? 'Work email verified' : item.source}`, verifiedAt: item.verifiedAt, data };
+  } else if (item.source === 'work-email' && typeof item.data.domain === 'string') {
+    data.domain = item.data.domain;
+  } else if (item.source === 'linkedin') {
+    if (typeof item.data.name === 'string' && item.data.name.trim()) data.name = item.data.name.trim().slice(0, 120);
+    if (typeof item.data.email === 'string' && item.data.email.trim()) data.email = item.data.email.trim().toLowerCase().slice(0, 254);
+  }
+  return { id: item.source === 'work-email' ? `work-email:${data.domain}` : item.source, source: item.source, label: `${item.source === 'github' ? 'GitHub activity' : item.source === 'linkedin' ? 'LinkedIn account' : item.source === 'work-email' ? 'Work email verified' : item.source}`, verifiedAt: item.verifiedAt, data };
 }
 
 export function publicSummary(profile: Pick<TalentProfile, 'experience' | 'headline' | 'about' | 'verified'>): string {
@@ -268,19 +345,62 @@ export class Profiles {
   }
   async mine(caller: TalentCaller): Promise<TalentProfile> {
     const { id } = callerOf(caller);
-    return (await this.col.doc(id).get()).data() as TalentProfile | undefined ?? { personId: id, alias: '', publicSummary: '', headline: '', about: '', experience: [], verified: [], openTo: '', preferences: '', employerDomains: [], version: 0, updatedAt: '' };
+    return normalizeProfile(id, (await this.col.doc(id).get()).data() as Partial<TalentProfile> | undefined);
   }
-  async get(personId: string): Promise<TalentProfile | undefined> { return (await this.col.doc(personId).get()).data() as TalentProfile | undefined; }
+  async get(personId: string): Promise<TalentProfile | undefined> {
+    const data = (await this.col.doc(personId).get()).data() as Partial<TalentProfile> | undefined;
+    return data ? normalizeProfile(personId, data) : undefined;
+  }
   async save(caller: TalentCaller, raw: unknown): Promise<TalentProfile> {
     const { id } = callerOf(caller);
     const body = object(raw);
-    const allowed = new Set(['version', 'headline', 'about', 'experience', 'openTo', 'preferences', 'employerDomains']);
+    const allowed = new Set([
+      'version', 'headline', 'about', 'experience', 'openTo', 'preferences',
+      'salary', 'salaryMin', 'salaryCurrency', 'locations', 'workModes', 'remote', 'hybrid', 'onsite', 'noGos', 'employerDomains',
+    ]);
     if (Object.keys(body).some((key) => !allowed.has(key))) throw new TalentError('invalid', 'Only editable profile fields may be submitted');
     if (!Number.isInteger(body.version) || Number(body.version) < 0) throw new TalentError('invalid', 'The current profile version is required');
     const changes: Partial<TalentProfile> = {};
     for (const [key, max] of [['headline', 200], ['about', 6000], ['openTo', 500]] as const) if (key in body) changes[key] = text(body[key], max, key);
     if ('experience' in body) changes.experience = experience(body.experience);
     if ('preferences' in body) changes.preferences = text(body.preferences, 1000, 'preferences');
+    if ('noGos' in body) changes.noGos = text(body.noGos, 1000, 'noGos');
+    let salaryMinProvided = false, parsedSalaryMin: number | undefined;
+    let salaryCurrencyProvided = false, parsedSalaryCurrency = 'USD';
+    if ('salary' in body && body.salary !== undefined && body.salary !== null) {
+      const sal = object(body.salary);
+      if (Object.keys(sal).some((k) => k !== 'min' && k !== 'currency')) throw new TalentError('invalid', 'salary may only contain min and currency');
+      if ('min' in sal) { salaryMinProvided = true; parsedSalaryMin = parseSalaryMin(sal.min); }
+      if ('currency' in sal) { salaryCurrencyProvided = true; parsedSalaryCurrency = parseSalaryCurrency(sal.currency); }
+    }
+    if ('salaryMin' in body) { salaryMinProvided = true; parsedSalaryMin = parseSalaryMin(body.salaryMin); }
+    if ('salaryCurrency' in body) { salaryCurrencyProvided = true; parsedSalaryCurrency = parseSalaryCurrency(body.salaryCurrency); }
+    let parsedLocations: string[] | undefined, parsedWorkModes: WorkMode[] | undefined;
+    const modeFlags: Partial<Record<WorkMode, boolean>> = {};
+    for (const mode of WORK_MODES) {
+      if (mode in body) {
+        if (typeof body[mode] !== 'boolean') throw new TalentError('invalid', `${mode} must be true or false`);
+        modeFlags[mode] = body[mode] as boolean;
+      }
+    }
+    if ('locations' in body) {
+      if (Array.isArray(body.locations)) {
+        if (body.locations.length > 20) throw new TalentError('invalid', 'locations must have at most 20 items');
+        parsedLocations = [...new Set(body.locations.map((v) => text(v, 100, 'locations')).filter(Boolean))];
+      } else {
+        const locObj = object(body.locations);
+        const listRaw = 'list' in locObj ? locObj.list : 'items' in locObj ? locObj.items : [];
+        if (!Array.isArray(listRaw) || listRaw.length > 20) throw new TalentError('invalid', 'locations must have at most 20 items');
+        parsedLocations = [...new Set(listRaw.map((v) => text(v, 100, 'locations')).filter(Boolean))];
+        for (const mode of WORK_MODES) {
+          if (mode in locObj) {
+            if (typeof locObj[mode] !== 'boolean') throw new TalentError('invalid', `${mode} must be true or false`);
+            modeFlags[mode] = locObj[mode] as boolean;
+          }
+        }
+      }
+    }
+    if ('workModes' in body) parsedWorkModes = parseWorkModes(body.workModes);
     if ('employerDomains' in body) {
       changes.employerDomains = strings(body.employerDomains, 30, 'employerDomains').map((v) => v.toLowerCase());
       if (changes.employerDomains.some((v) => !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(v))) throw new TalentError('invalid', 'Use domains such as example.com');
@@ -288,9 +408,28 @@ export class Profiles {
     const initial = await this.mine(id);
     return this.db.runTransaction(async (tx) => {
       const ref = this.col.doc(id);
-      const current = (await tx.get(ref)).data() as TalentProfile | undefined ?? initial;
+      const current = normalizeProfile(id, (await tx.get(ref)).data() as Partial<TalentProfile> | undefined ?? initial);
       if (current.version !== body.version) throw new TalentError('conflict', 'Profile changed. Reload before saving again.');
-      const next: TalentProfile = { ...current, ...changes, personId: id, alias: await this.alias(tx, current.alias), searchable: true, version: current.version + 1, updatedAt: new Date().toISOString() };
+      const finalMin = salaryMinProvided ? parsedSalaryMin : current.salary.min;
+      const finalCurrency = salaryCurrencyProvided ? parsedSalaryCurrency : current.salary.currency;
+      const finalLocations = parsedLocations !== undefined ? parsedLocations : current.locations;
+      let finalWorkModes = parsedWorkModes !== undefined ? parsedWorkModes : current.workModes;
+      if (Object.keys(modeFlags).length > 0 && parsedWorkModes === undefined) {
+        const modeSet = new Set<WorkMode>(finalWorkModes);
+        for (const mode of WORK_MODES) {
+          if (modeFlags[mode] === true) modeSet.add(mode);
+          else if (modeFlags[mode] === false) modeSet.delete(mode);
+        }
+        finalWorkModes = WORK_MODES.filter((m) => modeSet.has(m));
+      }
+      const next: TalentProfile = {
+        ...current, ...changes, personId: id, alias: await this.alias(tx, current.alias), searchable: true,
+        salary: finalMin !== undefined ? { min: finalMin, currency: finalCurrency } : { currency: finalCurrency },
+        salaryCurrency: finalCurrency, locations: finalLocations, workModes: finalWorkModes,
+        version: current.version + 1, updatedAt: new Date().toISOString(),
+      };
+      if (finalMin !== undefined) next.salaryMin = finalMin;
+      else delete next.salaryMin;
       next.verified = next.verified.map(professionalVerification);
       Object.assign(next, professionalDraft(next));
       next.employerDomains = [...new Set([...next.employerDomains, ...verifiedDomains(next.verified)])];
@@ -341,20 +480,51 @@ export class Profiles {
     }
     return professionalDraft({ ...draft, verified: profile.verified });
   }
-  async verify(personId: string, item: Verification, transaction?: Transaction): Promise<void> {
+  async verify(personId: string, item: Verification, transaction?: Transaction, subject?: string): Promise<void> {
     if (typeof personId !== 'string' || !personId.trim()) throw new TalentError('not_found', 'Candidate not found');
     const id = personId.trim();
+    const rawSub = subject ?? item.subject ?? (typeof item.data?.sub === 'string' || typeof item.data?.sub === 'number' ? String(item.data.sub) : undefined);
+    const sub = typeof rawSub === 'string' ? rawSub.trim() : '';
     const initial = await this.mine(id);
     const write = async (tx: Transaction) => {
-      const ref = this.col.doc(id); const current = (await tx.get(ref)).data() as TalentProfile | undefined ?? initial;
-      const next: TalentProfile = { ...current, alias: await this.alias(tx, current.alias), verified: [...current.verified.filter((v) => v.id !== item.id), item], version: current.version + 1, updatedAt: new Date().toISOString() };
+      const claimRef = (item.source === 'linkedin' || item.source === 'github') && sub
+        ? this.db.collection('talent_claims').doc(`${item.source}:${sub}`)
+        : undefined;
+      if (claimRef) {
+        const claimDoc = await tx.get(claimRef);
+        const existing = claimDoc.data() as { personId?: string } | undefined;
+        if (existing?.personId && existing.personId !== id) {
+          const providerLabel = item.source === 'linkedin' ? 'LinkedIn' : 'GitHub';
+          throw new TalentError('conflict', `This ${providerLabel} account is already connected to another profile`);
+        }
+      }
+      const allocatedAlias = await this.alias(tx, initial.alias);
+      const ref = this.col.doc(id);
+      const profileDoc = await tx.get(ref);
+      const current = normalizeProfile(id, (profileDoc.data() as Partial<TalentProfile> | undefined) ?? initial);
+      const next: TalentProfile = { ...current, alias: current.alias || allocatedAlias, verified: [...current.verified.filter((v) => v.id !== item.id), item], version: current.version + 1, updatedAt: new Date().toISOString() };
       next.verified = next.verified.map(professionalVerification);
       Object.assign(next, professionalDraft(next));
       next.employerDomains = [...new Set([...next.employerDomains, ...verifiedDomains(next.verified)])];
       next.publicSummary = publicSummary(next);
+      if (claimRef) {
+        tx.set(claimRef, { personId: id, provider: item.source, subject: sub, updatedAt: next.updatedAt });
+      }
       tx.set(ref, next);
     };
-    if (transaction) await write(transaction); else await this.db.runTransaction(write);
+    if (transaction) {
+      await write(transaction);
+    } else {
+      try {
+        await this.db.runTransaction(write);
+      } catch (err) {
+        if (err instanceof Error && /Transaction is invalid or closed/i.test(err.message)) {
+          await this.db.runTransaction(write);
+        } else {
+          throw err;
+        }
+      }
+    }
   }
   async recordContact(
     personId: string,
