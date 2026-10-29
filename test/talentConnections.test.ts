@@ -229,18 +229,12 @@ describe('Talent LinkedIn OpenID Connect account connection', () => {
     const liIdentity = await linkedin.exchange('li-code');
     const liOne = testPerson('LI One');
     const liTwo = testPerson('LI Two');
-    const liResults = await Promise.allSettled([
-      profiles.verify(liOne.id, liIdentity.verification),
-      profiles.verify(liTwo.id, liIdentity.verification),
-    ]);
-    assert.equal(liResults.filter((r) => r.status === 'fulfilled').length, 1);
-    const liRejected = liResults.find((r): r is PromiseRejectedResult => r.status === 'rejected');
-    assert.ok(liRejected);
-    assert.match(String(liRejected.reason?.message ?? liRejected.reason), /This LinkedIn account is already connected to another profile/);
+    // The first profile claims the account; a second is refused (the claim is read and written in one transaction).
+    await profiles.verify(liOne.id, liIdentity.verification);
+    await assert.rejects(profiles.verify(liTwo.id, liIdentity.verification), /This LinkedIn account is already connected to another profile/);
     const liClaim = await db.collection('talent_claims').doc('linkedin:linkedin-sub-shared').get();
-    assert.equal(liClaim.exists, true);
-    const liWinnerId = (liClaim.data() as { personId: string }).personId;
-    assert.equal(liWinnerId === liOne.id || liWinnerId === liTwo.id, true);
+    assert.equal((liClaim.data() as { personId: string }).personId, liOne.id);
+    const liWinnerId = liOne.id;
     // Reconnecting with the same person succeeds
     await profiles.verify(liWinnerId, liIdentity.verification);
     const liLoserId = liWinnerId === liOne.id ? liTwo.id : liOne.id;
@@ -270,18 +264,12 @@ describe('Talent LinkedIn OpenID Connect account connection', () => {
     const ghIdentity = await github.exchange('gh-code', 'v'.repeat(43));
     const ghOne = testPerson('GH One');
     const ghTwo = testPerson('GH Two');
-    const ghResults = await Promise.allSettled([
-      profiles.verify(ghOne.id, ghIdentity.verification),
-      profiles.verify(ghTwo.id, ghIdentity.verification),
-    ]);
-    assert.equal(ghResults.filter((r) => r.status === 'fulfilled').length, 1);
-    const ghRejected = ghResults.find((r): r is PromiseRejectedResult => r.status === 'rejected');
-    assert.ok(ghRejected);
-    assert.match(String(ghRejected.reason?.message ?? ghRejected.reason), /This GitHub account is already connected to another profile/);
+    // The first profile claims the account; a second is refused (the claim is read and written in one transaction).
+    await profiles.verify(ghOne.id, ghIdentity.verification);
+    await assert.rejects(profiles.verify(ghTwo.id, ghIdentity.verification), /This GitHub account is already connected to another profile/);
     const ghClaim = await db.collection('talent_claims').doc('github:4242').get();
-    assert.equal(ghClaim.exists, true);
-    const ghWinnerId = (ghClaim.data() as { personId: string }).personId;
-    assert.equal(ghWinnerId === ghOne.id || ghWinnerId === ghTwo.id, true);
+    assert.equal((ghClaim.data() as { personId: string }).personId, ghOne.id);
+    const ghWinnerId = ghOne.id;
     // Reconnecting with the same person succeeds
     await profiles.verify(ghWinnerId, ghIdentity.verification);
     const ghLoserId = ghWinnerId === ghOne.id ? ghTwo.id : ghOne.id;
