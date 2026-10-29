@@ -10,7 +10,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
   const { error } = await searchParams;
   return <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-7 px-6 py-7">
     <div className="flex items-center gap-2"><AppIcon /><Wordmark /></div>
-    <div className="flex justify-center pt-2"><Mark size={168} label="The Hireroom creature holding out a flower" /></div>
+    <div className="flex justify-center pt-2"><Mark size={168} label="The Shyhire creature holding out a flower" /></div>
     <div className="space-y-2.5">
       <h1 className="text-[38px] leading-[1.02] [text-wrap:balance]">Let your work introduce you.</h1>
       <p className="muted text-base">Agents check the fit first. Names stay private until both sides say yes.</p>

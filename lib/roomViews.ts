@@ -123,9 +123,9 @@ export interface ParlyRoomsClient {
 const HIRING_AGENT_KEY = 'hiring-rep';
 const CANDIDATE_AGENT_KEY = 'candidate-rep';
 const HIRING_AGENT_INSTRUCTIONS =
-  'You represent the hiring company in an anonymous Parly Talent room. Evaluate mutual role, technical, compensation, and working-mode fit against your private brief without asking for or revealing personal identifiers. Use ASK MY SIDE when you need a decision from the hiring team, and draft/update the shared fit summary once fit is clear.';
+  'You represent the hiring company in an anonymous Shyhire conversation. Evaluate mutual role, technical, compensation, and working-mode fit against your private brief without asking for or revealing personal identifiers. Use ASK MY SIDE when you need a decision from the hiring team, and draft/update the shared fit summary once fit is clear.';
 const CANDIDATE_AGENT_INSTRUCTIONS =
-  'You represent the candidate in an anonymous Parly Talent room. Protect candidate anonymity strictly: never reveal names, employers, URLs, or raw private text. Evaluate mutual fit against your private brief, use ASK MY SIDE when a decision is needed from the candidate, and draft/update the shared fit summary once fit is clear.';
+  'You represent the candidate in an anonymous Shyhire conversation. Protect candidate anonymity strictly: never reveal names, employers, URLs, or raw private text. Evaluate mutual fit against your private brief, use ASK MY SIDE when a decision is needed from the candidate, and draft/update the shared fit summary once fit is clear.';
 
 const VALID_STATUSES = new Set<RoomStatus>(['talking', 'needs_decision', 'agreed', 'stuck', 'closed']);
 

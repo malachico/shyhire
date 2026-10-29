@@ -35,7 +35,7 @@ export function noticeMailer(user: string | undefined, appPassword: string | und
   if (!user || !appPassword) return undefined;
   const transport = nodemailer.createTransport({ service: 'gmail', auth: { user, pass: appPassword } });
   return async (to, subject, text) => {
-    if (to.length) await transport.sendMail({ from: `Parly Talent <${user}>`, to, subject, text });
+    if (to.length) await transport.sendMail({ from: `Shyhire <${user}>`, to, subject, text });
   };
 }
 
@@ -83,7 +83,7 @@ export class WorkEmailVerification {
       tx.set(limit, targetWindow);
       tx.set(domainLimit, domainWindow);
     });
-    try { await this.mailer([email], 'Your Parly Talent verification code', `Your code is ${code}. It expires in 10 minutes. If you did not request this code, ignore this message.`); }
+    try { await this.mailer([email], 'Your Shyhire verification code', `Your code is ${code}. It expires in 10 minutes. If you did not request this code, ignore this message.`); }
     catch { throw new TalentError('unavailable', 'Could not send the verification code. Wait one minute and try again.'); }
     return { sent: true };
   }

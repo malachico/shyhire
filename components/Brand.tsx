@@ -1,4 +1,4 @@
-/** Hireroom's mark: the shy one, holding out a flower (and its app icon and wordmark). */
+/** Shyhire's mark: the shy one, holding out a flower (and its app icon and wordmark). */
 
 const FLOWER = [[13, 61.5], [18.3, 65.4], [16.3, 71.6], [9.7, 71.6], [7.7, 65.4]] as const;
 
@@ -28,5 +28,5 @@ export function AppIcon({ size = 28 }: { size?: number }) {
 }
 
 export function Wordmark({ className = 'text-[22px]' }: { className?: string }) {
-  return <span className={`display font-extrabold tracking-[-0.035em] ${className}`}>hireroom</span>;
+  return <span className={`display font-extrabold tracking-[-0.035em] ${className}`}>shyhire</span>;
 }
