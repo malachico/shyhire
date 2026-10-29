@@ -139,39 +139,33 @@ describe('Talent owner profiles', () => {
 });
 
 describe('Google Talent sign-in & GitHub/LinkedIn connections', () => {
-  it('builds PKCE authorization URL, exchanges code for verified Google sub/email, and rejects unverified accounts', async () => {
-    const calls: [string, RequestInit | undefined][] = [];
-    const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
-      calls.push([String(url), init]);
-      if (String(url).includes('oauth2.googleapis.com/token')) {
-        return new Response(JSON.stringify({ access_token: 'GOOGLE_ACCESS_TOKEN' }));
-      }
-      return new Response(JSON.stringify({
-        sub: 'google-sub-998877',
-        email: 'Alice@Example.com',
-        email_verified: true,
-        name: 'Alice Example',
-      }));
+  it('signs in with the client ID only: id_token URL with nonce, and accepts only a token Google verified for us, for this nonce, with a verified email', async () => {
+    const nonce = 'n'.repeat(32);
+    const seen: [string, string][] = [];
+    const verify = (claims: Record<string, unknown> | Error) => async (idToken: string, audience: string) => {
+      seen.push([idToken, audience]);
+      if (claims instanceof Error) throw claims;
+      return claims;
     };
-    const google = new TalentGoogle({ clientId: 'g-client', clientSecret: 'g-secret', webUrl: 'https://parly-talent.vercel.app' }, fetcher as typeof fetch);
-    const authUrl = new URL(google.authorizeUrl('state-123', 'v'.repeat(43)));
+    const ok = { sub: 'google-sub-998877', email: 'Alice@Example.com', email_verified: true, name: 'Alice Example', nonce };
+    const google = new TalentGoogle({ clientId: 'g-client', webUrl: 'https://parly-talent.vercel.app' }, verify(ok));
+    const authUrl = new URL(google.authorizeUrl('state-123', nonce));
     assert.equal(authUrl.origin, 'https://accounts.google.com');
     assert.equal(authUrl.searchParams.get('client_id'), 'g-client');
     assert.equal(authUrl.searchParams.get('redirect_uri'), `https://parly-talent.vercel.app${GOOGLE_CALLBACK_PATH}`);
-    assert.equal(authUrl.searchParams.get('code_challenge_method'), 'S256');
+    assert.equal(authUrl.searchParams.get('response_type'), 'id_token');
+    assert.equal(authUrl.searchParams.get('response_mode'), 'form_post');
+    assert.equal(authUrl.searchParams.get('nonce'), nonce);
+    assert.equal(authUrl.searchParams.get('client_secret'), null);
 
-    const identity = await google.exchange('auth-code', 'v'.repeat(43));
-    assert.deepEqual(identity, { sub: 'google-sub-998877', email: 'alice@example.com', name: 'Alice Example' });
-    assert.doesNotMatch(JSON.stringify(identity), /GOOGLE_ACCESS_TOKEN/);
+    assert.deepEqual(await google.identity('id.token.jwt', nonce), { sub: 'google-sub-998877', email: 'alice@example.com', name: 'Alice Example' });
+    assert.deepEqual(seen[0], ['id.token.jwt', 'g-client'], 'the token is verified with our client ID as the audience');
 
-    const unverifiedGoogle = new TalentGoogle(
-      { clientId: 'g-client', clientSecret: 'g-secret', webUrl: 'https://parly-talent.vercel.app' },
-      (async (url: string | URL | Request) =>
-        String(url).includes('token')
-          ? new Response(JSON.stringify({ access_token: 'tok' }))
-          : new Response(JSON.stringify({ sub: 'google-sub-1', email: 'a@b.com', email_verified: false }))) as typeof fetch,
-    );
-    await assert.rejects(unverifiedGoogle.exchange('auth-code', 'v'.repeat(43)), /unverified|invalid/);
+    const web = { clientId: 'g-client', webUrl: 'https://parly-talent.vercel.app' };
+    await assert.rejects(new TalentGoogle(web, verify({ ...ok, nonce: 'x'.repeat(32) })).identity('t', nonce), /failed/, 'another sign-in\'s token (replay)');
+    await assert.rejects(new TalentGoogle(web, verify({ ...ok, email_verified: false })).identity('t', nonce), /unverified|invalid/);
+    await assert.rejects(new TalentGoogle(web, verify(new Error('bad signature'))).identity('t', nonce), /failed/);
+    await assert.rejects(google.identity(undefined, nonce), /Invalid/);
   });
 });
 
