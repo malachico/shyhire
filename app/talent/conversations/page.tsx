@@ -3,6 +3,7 @@ import { currentSession } from '@/lib/auth';
 import { currentMode } from '@/lib/mode';
 import { TalentError } from '@/lib/profiles';
 import { roomViews, type ConversationRow } from '@/lib/roomViews';
+import { profiles } from '@/lib/talent';
 import { pillClass, statusOf } from '@/lib/status';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ export default async function Conversations() {
     if (!(e instanceof TalentError)) throw e;
     error = e.message;
   }
+  const profile = mode === 'hire' ? undefined : await profiles().mine(session.sub);
   return <main className="mx-auto max-w-3xl px-4 py-8">
     <h1 className="text-2xl font-semibold tracking-tight">Conversations</h1>
     {error && <p role="alert" className="mt-6 text-sm text-[var(--bad-fg)]">{error}</p>}
@@ -25,7 +27,9 @@ export default async function Conversations() {
       <p className="muted text-sm">No conversations yet.</p>
       {mode === 'hire'
         ? <a href="/talent/search" className="btn-primary mt-4">Find candidates</a>
-        : <a href="/talent/profile" className="btn-primary mt-4">Complete your profile</a>}
+        : !profile?.version
+          ? <a href="/talent/profile" className="btn-primary mt-4">Complete your profile</a>
+          : <p className="mt-2 text-sm">{profile.paused ? <>Your profile is paused. <a href="/talent/profile" className="link">Resume it</a> to get conversations.</> : "You're all set. When a company's agent wants to talk with you, it shows up here."}</p>}
     </div>}
     {!!rows.length && <ul className="mt-6 divide-y divide-[var(--border)] overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface)]">
       {rows.map((r) => {
