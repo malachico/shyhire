@@ -27,7 +27,8 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
     <a href="/talent/verify/work-email" className="btn-primary mt-6">Verify work email</a>
   </main>;
   // The candidates this person already talks to: their card shows that conversation instead of "Talk".
-  const existing = Object.fromEntries((await roomViews().listCompanyRooms(session.sub).catch(() => [])).map((r) => [r.candidateAlias, { id: r.id, label: statusOf(r.status, { needsMe: !!r.needsDecision, summaryReady: r.documentVersion !== undefined, iApproved: r.iApproved }).label }]));
+  // Oldest first, so the newest room for a candidate is the one that stays.
+  const existing = Object.fromEntries((await roomViews().listCompanyRooms(session.sub).catch(() => [])).reverse().map((r) => [r.candidateAlias, { id: r.id, label: statusOf(r.status, { needsMe: !!r.needsDecision, summaryReady: r.documentVersion !== undefined, iApproved: r.iApproved }).label }]));
   return <main className="mx-auto max-w-3xl px-4 py-8">
     <form action="/talent/search" className="flex gap-2">
       <input className="input min-w-0 flex-1" name="q" maxLength={1000} required defaultValue={q} aria-label="Describe the role" placeholder="Describe the role, e.g. backend engineer, Go, Postgres" />
