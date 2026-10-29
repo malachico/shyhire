@@ -17,7 +17,11 @@ export interface Room {
 export interface RoomMessage { id: string; channel: 'shared' | 'corner'; from: string; at: string; text: string; post?: string }
 
 export class ParlyError extends Error {
-  constructor(readonly status: number, message: string) { super(message); }
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
 }
 
 const base = () => (process.env.PARLY_API_URL ?? 'https://hub.parly.dev').replace(/\/+$/, '');

@@ -10,6 +10,8 @@ export default async function TalentLayout({ children }: { children: React.React
       <a href="/talent/profile" className="text-lg font-semibold tracking-tight">Parly <span className="font-normal text-[var(--muted)]">Talent</span></a>
       <div className="flex flex-wrap items-center gap-4 text-sm">
         <a href="/talent/search">Find candidates</a>
+        <a href="/talent/rooms">Company rooms</a>
+        <a href="/talent/requests">Requests</a>
         <a href="/talent/profile">Your profile</a>
         {session && <form action="/talent/auth/signout" method="post"><button className="btn">Sign out</button></form>}
       </div>
