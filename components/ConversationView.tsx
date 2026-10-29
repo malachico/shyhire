@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { approveTalentRoom, passTalentRoom } from '@/lib/actions/rooms';
 import type { TalentRoomDetail } from '@/lib/roomViews';
 import { pillClass, statusOf } from '@/lib/status';
+import { Mark } from './Brand';
 import { TalentRoomDecisionForm } from './TalentRoomDecisionForm';
 
 /** One conversation: its status, the one thing it needs from you (if any), the contact once matched. */
@@ -41,9 +42,11 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
     </div>
     {error && <p role="alert" className="mt-4 rounded-lg bg-[var(--bad-bg)] p-3 text-sm text-[var(--bad-fg)]">{error}</p>}
 
-    {matched && room.revealedContact && <section aria-label="Contact details" className="card mt-6 border-[#abefc6]">
-      <p className="font-semibold">You matched. Here&apos;s how to reach them.</p>
-      <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+    {matched && room.revealedContact && <section aria-label="Contact details" className="mt-6 rounded-[22px] bg-[var(--night)] p-5 text-[var(--bg)]">
+      <div className="flex items-end justify-center gap-1 pt-2" role="img" aria-label="One creature hands the other a flower"><span className="-scale-x-100"><Mark size={96} /></span><Mark size={84} flower={false} /></div>
+      <p className="mt-3 text-center text-xl font-semibold">You both said yes.</p>
+      <p className="mt-1 text-center text-sm text-[#C9D0E4]">Here&apos;s how to reach them.</p>
+      <dl className="mt-4 grid gap-3 rounded-[18px] bg-[var(--bg)] p-4 text-sm text-[var(--ink)] sm:grid-cols-2">
         <div><dt className="muted text-xs">Name</dt><dd>{room.revealedContact.displayName}</dd></div>
         {room.revealedContact.email && <div><dt className="muted text-xs">Email</dt><dd><a className="link" href={`mailto:${room.revealedContact.email}`}>{room.revealedContact.email}</a></dd></div>}
         {room.revealedContact.githubLogin && <div><dt className="muted text-xs">GitHub</dt><dd><a className="link" target="_blank" rel="noreferrer" href={room.revealedContact.githubUrl ?? `https://github.com/${room.revealedContact.githubLogin}`}>@{room.revealedContact.githubLogin}</a></dd></div>}
@@ -51,7 +54,7 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
     </section>}
 
     {!ended && !matched && myDecision && <section className="card mt-6">
-      <p className="muted text-xs font-medium uppercase tracking-wide">Your agent asks</p>
+      <p className="muted flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.08em]"><Mark size={34} flower={false} look="up" />Your agent asks</p>
       <TalentRoomDecisionForm roomId={room.id} question={myDecision.question} options={myDecision.options} />
       <button type="button" className="muted mt-4 text-sm underline" disabled={pending} onClick={pass}>Pass on this conversation</button>
     </section>}

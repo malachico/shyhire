@@ -1,6 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { Mark } from '@/components/Brand';
 import { openTalentRoom } from '@/lib/actions/rooms';
 import type { CandidateSearch } from '@/lib/talent';
 
@@ -48,9 +49,12 @@ export function CandidateResults({ results, query, existing }: { results: Candid
     {results.capped && <p className="muted mt-4 text-center text-xs">Showing the best 20 matches.</p>}
     {alias && <div role="dialog" aria-modal="true" aria-labelledby="talk-title" className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 sm:items-center" onClick={(e) => e.target === e.currentTarget && !pending && setAlias(undefined)}>
       <form onSubmit={startTalk} className="max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-t-2xl bg-[var(--surface)] p-5 sm:rounded-2xl">
-        <div>
-          <h2 id="talk-title" className="text-lg font-semibold">Talk to {alias}</h2>
-          <p className="muted mt-1 text-sm">Only your agent sees this. The candidate sees your company name.</p>
+        <div className="flex items-center gap-3">
+          <Mark size={44} />
+          <div>
+            <h2 id="talk-title" className="text-lg font-semibold">Talk to {alias}</h2>
+            <p className="muted text-sm">Only your agent sees this. The candidate sees your company name.</p>
+          </div>
         </div>
         <label className="field">Role<input className="input" value={role} onChange={(e) => setRole(e.target.value)} maxLength={200} required placeholder="Senior backend engineer" /></label>
         <label className="field">Salary band<input className="input" value={comp} onChange={(e) => setComp(e.target.value)} maxLength={200} placeholder="$180k–$220k" /></label>
