@@ -4,11 +4,16 @@ import nodemailer from 'nodemailer';
 import { callerOf, TalentError, type Profiles } from './profiles.ts';
 import type { TalentCaller } from './types.ts';
 
+/**
+ * Known public and email-aliasing providers that cannot represent a company domain.
+ * Note: custom personal domains cannot be distinguished from company domains by static list alone.
+ */
 export const FREE_MAIL_DOMAINS = new Set([
   'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'ymail.com',
   'icloud.com', 'me.com', 'mac.com', 'aol.com', 'proton.me', 'protonmail.com', 'pm.me', 'gmx.com', 'gmx.de',
   'gmx.net', 'mail.com', 'yandex.com', 'yandex.ru', 'fastmail.com', 'hey.com', 'zoho.com', 'tutanota.com',
-  'tuta.io', 'qq.com', '163.com', '126.com',
+  'tuta.io', 'qq.com', '163.com', '126.com', 'yahoo.co.uk', 'hotmail.co.uk', 'outlook.co.il', 'walla.co.il',
+  'mail.ru', 'web.de', 'duck.com', 'simplelogin.com', 'addy.io',
 ]);
 
 const DOMAIN_RE = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;

@@ -63,8 +63,8 @@ describe('Talent anonymous candidate search', () => {
     await assert.rejects(profiles.search(caller.id, 'Python'), /Verify your work email/);
     await assert.rejects(profiles.search(caller, 'Python'), /Verify your work email/);
 
-    // Once work email is verified, blocked domains are enforced and the caller's own profile is hidden.
-    await profiles.verify(caller.id, { id: 'work-email:employer.test', source: 'work-email', label: 'Work email verified', verifiedAt: '', data: { domain: 'employer.test' } });
+    // Once work email is verified, blocked domains (and subdomains) are enforced and the caller's own profile is hidden.
+    await profiles.verify(caller.id, { id: 'work-email:eng.employer.test', source: 'work-email', label: 'Work email verified', verifiedAt: '', data: { domain: 'eng.employer.test' } });
     assert.deepEqual((await profiles.search(caller.id, 'Python')).profiles, []);
   });
 });

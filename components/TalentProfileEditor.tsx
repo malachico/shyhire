@@ -4,7 +4,7 @@ import type { Experience, ProfileDraft, TalentProfile } from '@/lib/talent';
 import { saveTalentProfile } from '@/lib/actions/talent';
 
 /** Owner-only editor. The anonymous room summary is computed on the server, never from client-supplied prose. */
-export function TalentProfileEditor({ initial, error: initialError, linkedinAvailable = false, workEmailAvailable = false }: { initial: TalentProfile; error?: string; linkedinAvailable?: boolean; workEmailAvailable?: boolean }) {
+export function TalentProfileEditor({ initial, error: initialError, linkedinAvailable = false, workEmailAvailable = false, importAvailable = true }: { initial: TalentProfile; error?: string; linkedinAvailable?: boolean; workEmailAvailable?: boolean; importAvailable?: boolean }) {
   const [profile, setProfile] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [domains, setDomains] = useState(initial.employerDomains.join(', '));
@@ -55,11 +55,13 @@ export function TalentProfileEditor({ initial, error: initialError, linkedinAvai
     </section>
     <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-9">
-        <section aria-labelledby="source-title"><h2 id="source-title" className="text-xl font-semibold">Create your professional profile</h2><p className="mt-2 text-sm text-[var(--muted)]">Optionally paste your CV or LinkedIn experience, or choose your PDF export. Create my profile combines this with connected professional signals. Review and approve the draft before saving.</p>
-          <label className="mt-4 block text-sm">CV or LinkedIn text<textarea className={`${input} mt-1 min-h-32`} aria-label="CV or LinkedIn text" maxLength={40000} disabled={busy || !!file} value={source} onChange={(e) => setSource(e.target.value)} /></label>
-          <label className="mt-3 block text-sm">Or your CV / LinkedIn PDF<input className="mt-1 block max-w-full text-sm" type="file" accept="application/pdf" aria-label="LinkedIn PDF" disabled={busy} onChange={(e) => { setFile(e.target.files?.[0]); setDraft(undefined); }} /></label>
-          <p className="mt-2 text-xs text-[var(--muted)]">Up to 3 MB. Source text and PDF bytes are used transiently for extraction; Talent does not save the source document.</p>
-          {file && <button className="mt-2 text-sm underline" disabled={busy} onClick={() => setFile(undefined)}>Use pasted text instead</button>}
+        <section aria-labelledby="source-title"><h2 id="source-title" className="text-xl font-semibold">Create your professional profile</h2><p className="mt-2 text-sm text-[var(--muted)]">{importAvailable ? 'Optionally paste your CV or LinkedIn experience, or choose your PDF export. Create my profile combines this with connected professional signals. Review and approve the draft before saving.' : 'Generate a starting draft from your connected professional signals, or fill in your profile below. Review and approve the draft before saving.'}</p>
+          {importAvailable && <>
+            <label className="mt-4 block text-sm">CV or LinkedIn text<textarea className={`${input} mt-1 min-h-32`} aria-label="CV or LinkedIn text" maxLength={40000} disabled={busy || !!file} value={source} onChange={(e) => setSource(e.target.value)} /></label>
+            <label className="mt-3 block text-sm">Or your CV / LinkedIn PDF<input className="mt-1 block max-w-full text-sm" type="file" accept="application/pdf" aria-label="LinkedIn PDF" disabled={busy} onChange={(e) => { setFile(e.target.files?.[0]); setDraft(undefined); }} /></label>
+            <p className="mt-2 text-xs text-[var(--muted)]">Up to 3 MB. Source text and PDF bytes are used transiently for extraction; Talent does not save the source document.</p>
+            {file && <button className="mt-2 text-sm underline" disabled={busy} onClick={() => setFile(undefined)}>Use pasted text instead</button>}
+          </>}
           <button className="btn mt-4" disabled={busy} onClick={() => void extract()}>{busy ? 'Working…' : 'Create my profile'}</button>
           {draft && <section aria-label="Imported draft" className="mt-4 rounded-xl border border-[var(--border)] p-4"><h3 className="font-semibold">Review your professional draft</h3><p className="mt-2 break-words">{draft.headline}</p><ul className="mt-3 space-y-2">{draft.experience.map((r) => <li key={r.id} className="text-sm"><strong>{r.title || 'Untitled role'}</strong>{r.company && ` · ${r.company}`}<p className="text-[var(--muted)]">{r.start} {r.end && `– ${r.end}`}</p></li>)}</ul><p className="mt-3 text-sm text-[var(--muted)]">Using this draft replaces the experience in your unsaved editor. Your saved profile stays unchanged until Save.</p><div className="mt-3 flex flex-wrap gap-3"><button className="btn-primary" disabled={busy} onClick={() => { change(draft); setDraft(undefined); }}>Use this draft</button><button className="btn" disabled={busy} onClick={() => setDraft(undefined)}>Discard draft</button></div></section>}
         </section>

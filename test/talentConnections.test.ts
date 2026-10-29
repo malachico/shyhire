@@ -18,9 +18,14 @@ const privateDraft = {
 };
 
 describe('Talent professional profile generation', () => {
-  it('wires vertexProfileImporter + firestoreLlmMeter by default in createProfiles/profiles(), generates a reviewable draft and persists only professional facts after approval', async () => {
-    assert.equal(typeof defaultProfiles().importer, 'function');
+  it('wires vertexProfileImporter + firestoreLlmMeter by default when configured, wraps token failures in TalentError(unavailable), generates a reviewable draft and persists only professional facts after approval', async () => {
     const db = testDb(), person = testPerson();
+    const unconfigured = createProfiles(db);
+    assert.equal(unconfigured.importer, undefined);
+    const brokenToken = createProfiles(db, {
+      accessToken: async () => { throw new Error('missing WIF'); },
+    });
+    await assert.rejects(brokenToken.draft(person, { text: 'CV text' }), { code: 'unavailable', status: 503 });
     const profiles = createProfiles(db, {
       accessToken: async () => 'test-token',
       fetchImpl: (async () => new Response(JSON.stringify({

@@ -10,23 +10,32 @@ export type { CandidateCard, CandidateSearch, Experience, ProfileDraft, TalentPr
 
 let cachedProfiles: Profiles | undefined;
 
+export function profileImportConfigured(): boolean {
+  return Boolean(
+    (process.env.GCP_PROJECT_NUMBER && process.env.GCP_SERVICE_ACCOUNT_EMAIL) ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS,
+  );
+}
+
 export function createProfiles(
   store: Firestore = db(),
   importerOpts?: Partial<Parameters<typeof vertexProfileImporter>[0]>,
 ): Profiles {
   const instance = new Profiles(store);
-  instance.importer = vertexProfileImporter({
-    project: importerOpts?.project ?? process.env.VERTEX_PROJECT ?? process.env.GCP_PROJECT_ID ?? DEFAULT_GCP_PROJECT_ID,
-    location: importerOpts?.location ?? process.env.VERTEX_LOCATION ?? 'global',
-    model: importerOpts?.model ?? process.env.VERTEX_MODEL ?? 'gemini-2.5-flash',
-    prices: importerOpts?.prices ?? {
-      input: Number(process.env.LLM_PRICE_INPUT_PER_MTOK || 2),
-      output: Number(process.env.LLM_PRICE_OUTPUT_PER_MTOK || 12),
-    },
-    meter: importerOpts?.meter ?? firestoreLlmMeter(store),
-    accessToken: importerOpts?.accessToken ?? gcpAccessToken,
-    ...(importerOpts?.fetchImpl ? { fetchImpl: importerOpts.fetchImpl } : {}),
-  });
+  if (importerOpts || profileImportConfigured()) {
+    instance.importer = vertexProfileImporter({
+      project: importerOpts?.project ?? process.env.VERTEX_PROJECT ?? process.env.GCP_PROJECT_ID ?? DEFAULT_GCP_PROJECT_ID,
+      location: importerOpts?.location ?? process.env.VERTEX_LOCATION ?? 'global',
+      model: importerOpts?.model ?? process.env.VERTEX_MODEL ?? 'gemini-2.5-flash',
+      prices: importerOpts?.prices ?? {
+        input: Number(process.env.LLM_PRICE_INPUT_PER_MTOK || 0.3),
+        output: Number(process.env.LLM_PRICE_OUTPUT_PER_MTOK || 2.5),
+      },
+      meter: importerOpts?.meter ?? firestoreLlmMeter(store),
+      accessToken: importerOpts?.accessToken ?? gcpAccessToken,
+      ...(importerOpts?.fetchImpl ? { fetchImpl: importerOpts.fetchImpl } : {}),
+    });
+  }
   return instance;
 }
 
