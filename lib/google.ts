@@ -1,5 +1,7 @@
-// Server code only. Google OAuth 2.0 + PKCE sign-in; the access token is used once to read OpenID userinfo and never stored.
-import { createHash } from 'node:crypto';
+// Server code only. Sign in with Google using the client ID alone (OpenID Connect, id_token + form_post): Google
+// posts a signed ID token back to the callback; we check Google's signature, our client ID as the audience, the
+// one-time nonce, and a verified email. No client secret and no access token.
+import { OAuth2Client } from 'google-auth-library';
 import { appUrl } from './github.ts';
 import { TalentError } from './profiles.ts';
 
@@ -12,88 +14,57 @@ export interface GoogleIdentity {
   name?: string;
 }
 
-export interface TalentGoogleOptions {
-  clientId: string;
-  clientSecret: string;
-  webUrl: string;
-}
+/** The ID token's claims once Google's signature and the audience are checked. */
+export type IdTokenClaims = { sub?: unknown; email?: unknown; email_verified?: unknown; name?: unknown; nonce?: unknown };
+export type VerifyIdToken = (idToken: string, audience: string) => Promise<IdTokenClaims | undefined>;
+
+const googleVerify: VerifyIdToken = async (idToken, audience) => {
+  const ticket = await new OAuth2Client(audience).verifyIdToken({ idToken, audience });
+  return ticket.getPayload();
+};
 
 export class TalentGoogle {
-  readonly options: TalentGoogleOptions;
-  private readonly fetchImpl: typeof fetch;
+  readonly options: { clientId: string; webUrl: string };
+  private readonly verify: VerifyIdToken;
 
-  constructor(options: TalentGoogleOptions, fetchImpl: typeof fetch = fetch) {
+  constructor(options: { clientId: string; webUrl: string }, verify: VerifyIdToken = googleVerify) {
     this.options = options;
-    this.fetchImpl = fetchImpl;
+    this.verify = verify;
   }
 
-  authorizeUrl(state: string, verifier: string): string {
+  authorizeUrl(state: string, nonce: string): string {
     const query = new URLSearchParams({
       client_id: this.options.clientId,
       redirect_uri: `${this.options.webUrl.replace(/\/+$/, '')}${GOOGLE_CALLBACK_PATH}`,
-      response_type: 'code',
+      response_type: 'id_token',
+      response_mode: 'form_post',
       scope: 'openid email profile',
       state,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256',
+      nonce,
       prompt: 'select_account',
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${query}`;
   }
 
-  async exchange(code: unknown, verifier: unknown): Promise<GoogleIdentity> {
-    if (
-      typeof code !== 'string' ||
-      !code ||
-      code.length > 500 ||
-      typeof verifier !== 'string' ||
-      !/^[A-Za-z0-9_-]{43,128}$/.test(verifier)
-    ) {
-      throw new TalentError('invalid', 'Invalid Google authorization');
+  /** The person in a posted ID token, if Google signed it for us, for this sign-in (nonce), with a verified email. */
+  async identity(idToken: unknown, nonce: unknown): Promise<GoogleIdentity> {
+    if (typeof idToken !== 'string' || !idToken || idToken.length > 4096 || typeof nonce !== 'string' || nonce.length < 16) {
+      throw new TalentError('invalid', 'Invalid Google sign-in');
     }
-    const tokenRes = await this.fetchImpl('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: this.options.clientId,
-        client_secret: this.options.clientSecret,
-        code,
-        code_verifier: verifier,
-        grant_type: 'authorization_code',
-        redirect_uri: `${this.options.webUrl.replace(/\/+$/, '')}${GOOGLE_CALLBACK_PATH}`,
-      }).toString(),
-      signal: AbortSignal.timeout(15_000),
-      redirect: 'error',
-    });
-    const auth = (await tokenRes.json().catch(() => ({}))) as { access_token?: string; error?: string };
-    if (!tokenRes.ok || !auth.access_token || auth.error) {
+    let claims: IdTokenClaims | undefined;
+    try {
+      claims = await this.verify(idToken, this.options.clientId);
+    } catch {
       throw new TalentError('unauthorized', 'Google sign-in failed. Start again.');
     }
-    const userRes = await this.fetchImpl('https://openidconnect.googleapis.com/v1/userinfo', {
-      headers: { authorization: `Bearer ${auth.access_token}`, accept: 'application/json' },
-      signal: AbortSignal.timeout(15_000),
-      redirect: 'error',
-    });
-    if (!userRes.ok) {
-      throw new TalentError('unavailable', 'Google could not verify your account. Try again.');
-    }
-    const user = (await userRes.json().catch(() => ({}))) as {
-      sub?: unknown;
-      email?: unknown;
-      email_verified?: unknown;
-      name?: unknown;
-    };
-    const sub = typeof user.sub === 'string' ? user.sub.trim() : '';
-    const email = typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';
-    if (!sub || !/^[A-Za-z0-9._-]{1,255}$/.test(sub) || !email || !email.includes('@') || user.email_verified !== true) {
+    if (!claims || claims.nonce !== nonce) throw new TalentError('unauthorized', 'Google sign-in failed. Start again.');
+    const sub = typeof claims.sub === 'string' ? claims.sub.trim() : '';
+    const email = typeof claims.email === 'string' ? claims.email.trim().toLowerCase() : '';
+    if (!sub || !/^[A-Za-z0-9._-]{1,255}$/.test(sub) || !email || !email.includes('@') || claims.email_verified !== true) {
       throw new TalentError('unauthorized', 'Google returned an unverified or invalid identity');
     }
-    const name = typeof user.name === 'string' && user.name.trim() ? user.name.trim().slice(0, 120) : undefined;
-    return {
-      sub,
-      email,
-      ...(name ? { name } : {}),
-    };
+    const name = typeof claims.name === 'string' && claims.name.trim() ? claims.name.trim().slice(0, 120) : undefined;
+    return { sub, email, ...(name ? { name } : {}) };
   }
 }
 
@@ -101,22 +72,10 @@ export function googleClientId(): string | undefined {
   return process.env.TALENT_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || undefined;
 }
 
-export function googleClientSecret(): string | undefined {
-  return process.env.TALENT_GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || undefined;
-}
-
 export function googleConfigured(): boolean {
-  return Boolean(googleClientId() && googleClientSecret() && process.env.APP_URL);
+  return Boolean(googleClientId() && process.env.APP_URL);
 }
 
 export function googleClient(): TalentGoogle {
-  return new TalentGoogle({
-    clientId: googleClientId()!,
-    clientSecret: googleClientSecret()!,
-    webUrl: appUrl(),
-  });
-}
-
-export async function googleAccount(code: string, verifier: string): Promise<GoogleIdentity> {
-  return googleClient().exchange(code, verifier);
+  return new TalentGoogle({ clientId: googleClientId()!, webUrl: appUrl() });
 }

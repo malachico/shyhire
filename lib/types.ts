@@ -27,6 +27,8 @@ export interface SalaryPreference {
 
 export interface TalentProfile {
   searchable?: boolean;
+  /** The candidate paused matching: kept across saves; search and new rooms skip them. */
+  paused?: boolean;
   personId: string;
   alias: string;
   publicSummary: string;

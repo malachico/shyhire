@@ -35,3 +35,20 @@ export async function confirmWorkEmail(code: string): Promise<{ verified: true; 
     throw error;
   }
 }
+
+export async function setDiscoverable(open: boolean): Promise<{ profile: TalentProfile; error?: never } | { error: string; profile?: never }> {
+  try {
+    return { profile: await profiles().setPaused(await requirePersonId(), !open) };
+  } catch (error) {
+    if (error instanceof TalentError) return { error: error.message };
+    throw error;
+  }
+}
+
+export async function switchMode(mode: unknown): Promise<void> {
+  const { parseMode, setMode, homeOf } = await import('../mode.ts');
+  const { redirect } = await import('next/navigation');
+  const m = parseMode(mode);
+  await setMode(m);
+  redirect(homeOf(m));
+}

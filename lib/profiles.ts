@@ -56,6 +56,7 @@ export function normalizeProfile(personId: string, raw?: Partial<TalentProfile>)
     : [];
   return {
     ...(raw?.searchable ? { searchable: true } : {}),
+    ...(raw?.paused ? { paused: true } : {}),
     personId: raw?.personId || personId,
     alias: typeof raw?.alias === 'string' ? raw.alias : '',
     publicSummary: typeof raw?.publicSummary === 'string' ? raw.publicSummary : '',
@@ -449,7 +450,7 @@ export class Profiles {
     const found = await this.col.where('searchable', '==', true).limit(201).get();
     const ranked = found.docs.slice(0, 200).flatMap((doc) => {
       const profile = doc.data() as TalentProfile;
-      if (doc.id === id || !/^Candidate #[a-f0-9]{8,36}$/i.test(profile.alias) || profile.employerDomains.some((domain) => domainBlocked(domain, domains))) return [];
+      if (doc.id === id || profile.paused || !/^Candidate #[a-f0-9]{8,36}$/i.test(profile.alias) || profile.employerDomains.some((domain) => domainBlocked(domain, domains))) return [];
       const summary = publicSummary(profile);
       const skills = new Set(matchingTerms(summary).map((term) => term.toLowerCase()));
       const score = terms.filter((term) => skills.has(term)).length;
@@ -458,6 +459,14 @@ export class Profiles {
     });
     ranked.sort((a, b) => b.score - a.score || a.card.alias.localeCompare(b.card.alias));
     return { profiles: ranked.slice(0, 20).map((r) => r.card), capped: found.size > 200 };
+  }
+  /** Pause or resume matching. Only a saved profile can be paused; saving keeps the choice. */
+  async setPaused(caller: TalentCaller, paused: boolean): Promise<TalentProfile> {
+    const { id } = callerOf(caller);
+    const ref = this.col.doc(id);
+    if (!(await ref.get()).exists) throw new TalentError('invalid', 'Save your profile first');
+    await ref.set({ paused, updatedAt: new Date().toISOString() }, { merge: true });
+    return this.mine(caller);
   }
   async draft(caller: TalentCaller, raw: unknown): Promise<ProfileDraft> {
     const { id } = callerOf(caller);

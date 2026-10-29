@@ -58,3 +58,15 @@ export async function approveTalentRoom(
     throw error;
   }
 }
+
+export async function passTalentRoom(roomId: string): Promise<{ ok: true; error?: never } | { error: string; ok?: never }> {
+  try {
+    const res = await roomViews().pass(await requirePersonId(), roomId);
+    revalidatePath('/talent/conversations');
+    revalidatePath(`/talent/conversations/${roomId}`);
+    return res;
+  } catch (error) {
+    if (error instanceof TalentError) return { error: error.message };
+    throw error;
+  }
+}
