@@ -13,12 +13,12 @@ export async function GET(request: Request) {
   try {
     const session = await currentSession();
     const linkedin = talentLinkedIn();
-    const flow = JSON.parse(raw ?? 'null') as { state: string; githubId: number } | null;
+    const flow = JSON.parse(raw ?? 'null') as { state: string; personId: string } | null;
     const state = new URL(request.url).searchParams.get('state') ?? '';
-    if (!session || !linkedin || !flow || typeof flow.state !== 'string' || flow.state.length !== state.length || !timingSafeEqual(Buffer.from(flow.state), Buffer.from(state)) || flow.githubId !== session.githubId) {
+    if (!session || !linkedin || !flow || typeof flow.state !== 'string' || flow.state.length !== state.length || !timingSafeEqual(Buffer.from(flow.state), Buffer.from(state)) || flow.personId !== session.sub) {
       throw new Error('Invalid state');
     }
-    await linkedin.verify(String(session.githubId));
+    await linkedin.verify(session.sub);
   } catch {
     destination.searchParams.set('error', 'LinkedIn could not confirm this connection. Try reconnecting, or create your profile without it.');
   }

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, it, mock } from 'node:test';
 import { createFirestore, DEFAULT_GCP_PROJECT_ID, testDb } from '../lib/db.ts';
 import { githubProfileQuery, TalentGitHub } from '../lib/github.ts';
+import { GOOGLE_CALLBACK_PATH, TalentGoogle } from '../lib/google.ts';
 import { Profiles, publicSummary, vertexProfileImporter, wire, type LlmMeter } from '../lib/profiles.ts';
 
 function testPerson(name = 'Owner') {
@@ -41,6 +42,50 @@ describe('Talent owner profiles', () => {
     await assert.rejects(profiles.mine({ id: 'bot-1', kind: 'bot' }), /person/);
     const results = await Promise.allSettled([profiles.save(person, { version: saved.version, about: 'one' }), profiles.save(person, { version: saved.version, about: 'two' })]);
     assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+  });
+
+  it('stores split private preferences (salary min + currency, locations + workModes, noGos) privately and validates inputs', async () => {
+    const profiles = new Profiles(testDb());
+    const person = { id: 'google-sub-candidate-1', kind: 'human' as const, email: 'cand@people.test' };
+    const saved = await profiles.save(person, {
+      version: 0,
+      headline: 'Senior Go & Kubernetes Backend Engineer',
+      about: 'Distributed systems in Go and PostgreSQL',
+      salary: { min: 185000, currency: 'eur' },
+      locations: ['Berlin', 'London', 'Berlin'],
+      workModes: ['hybrid', 'remote'],
+      noGos: 'No crypto, gambling, or >1-in-6 on-call',
+      experience: [{ title: 'Senior Backend Engineer', company: 'Secret Corp', description: 'Go, PostgreSQL, Kubernetes', start: '2020-01', end: '2024-01', hidden: false }],
+    });
+    assert.deepEqual(saved.salary, { min: 185000, currency: 'EUR' });
+    assert.equal(saved.salaryMin, 185000);
+    assert.equal(saved.salaryCurrency, 'EUR');
+    assert.deepEqual(saved.locations, ['Berlin', 'London']);
+    assert.deepEqual(saved.workModes, ['remote', 'hybrid']);
+    assert.equal(saved.noGos, 'No crypto, gambling, or >1-in-6 on-call');
+    assert.doesNotMatch(saved.publicSummary, /185000|EUR|Berlin|London|crypto|gambling/);
+
+    const reloaded = await profiles.mine(person);
+    assert.deepEqual(reloaded.salary, { min: 185000, currency: 'EUR' });
+    assert.deepEqual(reloaded.locations, ['Berlin', 'London']);
+    assert.deepEqual(reloaded.workModes, ['remote', 'hybrid']);
+    assert.equal(reloaded.noGos, 'No crypto, gambling, or >1-in-6 on-call');
+
+    // Clearing salary min removes salaryMin while keeping currency
+    const cleared = await profiles.save(person, {
+      version: reloaded.version,
+      salary: { min: null, currency: 'GBP' },
+      onsite: true,
+      hybrid: false,
+    });
+    assert.deepEqual(cleared.salary, { currency: 'GBP' });
+    assert.equal(cleared.salaryMin, undefined);
+    assert.deepEqual(cleared.workModes, ['remote', 'onsite']);
+
+    // Validation errors on invalid salary, currency, or workModes
+    await assert.rejects(profiles.save(person, { version: cleared.version, salary: { min: -50, currency: 'USD' } }), /Minimum salary/);
+    await assert.rejects(profiles.save(person, { version: cleared.version, salary: { min: 100000, currency: 'US$' } }), /Currency/);
+    await assert.rejects(profiles.save(person, { version: cleared.version, workModes: ['anywhere'] }), /workModes/);
   });
 
   it('uses controlled roles, merged date ranges and numeric verified counts without identifiers', () => {
@@ -90,6 +135,43 @@ describe('Talent owner profiles', () => {
 
   it('does not copy hidden role prose into the anonymous summary', () => {
     assert.equal(publicSummary({ headline: '', about: '', experience: [{ id: 'x', title: 'Rust engineer', company: 'Secret', start: '', end: '', description: '', hidden: true, source: 'self' }], verified: [] }).includes('Rust'), false);
+  });
+});
+
+describe('Google Talent sign-in & GitHub/LinkedIn connections', () => {
+  it('builds PKCE authorization URL, exchanges code for verified Google sub/email, and rejects unverified accounts', async () => {
+    const calls: [string, RequestInit | undefined][] = [];
+    const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push([String(url), init]);
+      if (String(url).includes('oauth2.googleapis.com/token')) {
+        return new Response(JSON.stringify({ access_token: 'GOOGLE_ACCESS_TOKEN' }));
+      }
+      return new Response(JSON.stringify({
+        sub: 'google-sub-998877',
+        email: 'Alice@Example.com',
+        email_verified: true,
+        name: 'Alice Example',
+      }));
+    };
+    const google = new TalentGoogle({ clientId: 'g-client', clientSecret: 'g-secret', webUrl: 'https://parly-talent.vercel.app' }, fetcher as typeof fetch);
+    const authUrl = new URL(google.authorizeUrl('state-123', 'v'.repeat(43)));
+    assert.equal(authUrl.origin, 'https://accounts.google.com');
+    assert.equal(authUrl.searchParams.get('client_id'), 'g-client');
+    assert.equal(authUrl.searchParams.get('redirect_uri'), `https://parly-talent.vercel.app${GOOGLE_CALLBACK_PATH}`);
+    assert.equal(authUrl.searchParams.get('code_challenge_method'), 'S256');
+
+    const identity = await google.exchange('auth-code', 'v'.repeat(43));
+    assert.deepEqual(identity, { sub: 'google-sub-998877', email: 'alice@example.com', name: 'Alice Example' });
+    assert.doesNotMatch(JSON.stringify(identity), /GOOGLE_ACCESS_TOKEN/);
+
+    const unverifiedGoogle = new TalentGoogle(
+      { clientId: 'g-client', clientSecret: 'g-secret', webUrl: 'https://parly-talent.vercel.app' },
+      (async (url: string | URL | Request) =>
+        String(url).includes('token')
+          ? new Response(JSON.stringify({ access_token: 'tok' }))
+          : new Response(JSON.stringify({ sub: 'google-sub-1', email: 'a@b.com', email_verified: false }))) as typeof fetch,
+    );
+    await assert.rejects(unverifiedGoogle.exchange('auth-code', 'v'.repeat(43)), /unverified|invalid/);
   });
 });
 

@@ -17,6 +17,13 @@ export interface Verification {
   data: Record<string, string | number | boolean | string[]>;
 }
 
+export type WorkMode = 'remote' | 'hybrid' | 'onsite';
+
+export interface SalaryPreference {
+  min?: number;
+  currency: string;
+}
+
 export interface TalentProfile {
   searchable?: boolean;
   personId: string;
@@ -28,6 +35,12 @@ export interface TalentProfile {
   verified: Verification[];
   openTo: string;
   preferences: string;
+  salary: SalaryPreference;
+  salaryMin?: number;
+  salaryCurrency: string;
+  locations: string[];
+  workModes: WorkMode[];
+  noGos: string;
   employerDomains: string[];
   version: number;
   updatedAt: string;

@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid draft input' }, { status: 400 });
   }
   try {
-    return Response.json({ draft: await profiles().draft(String(session.githubId), body) });
+    return Response.json({ draft: await profiles().draft(session.sub, body) });
   } catch (error) {
     if (error instanceof TalentError) return Response.json({ error: error.message }, { status: error.status });
     throw error;

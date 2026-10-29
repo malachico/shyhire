@@ -152,6 +152,41 @@ function sideKindOfRef(ref: string, room: Room | undefined, record: StoredTalent
   return undefined;
 }
 
+export function formatCandidatePreferencesBrief(profile: Partial<TalentProfile>): string[] {
+  const lines: string[] = [];
+  const min =
+    typeof profile.salary?.min === 'number' && Number.isFinite(profile.salary.min) && profile.salary.min > 0
+      ? profile.salary.min
+      : typeof profile.salaryMin === 'number' && Number.isFinite(profile.salaryMin) && profile.salaryMin > 0
+        ? profile.salaryMin
+        : undefined;
+  const currency = (profile.salary?.currency || profile.salaryCurrency || 'USD').trim().toUpperCase();
+  if (min !== undefined) {
+    lines.push(`Salary: minimum ${min} ${currency}`);
+  }
+  const locs = Array.isArray(profile.locations)
+    ? profile.locations.map((l) => String(l).trim()).filter(Boolean)
+    : [];
+  const modes = Array.isArray(profile.workModes)
+    ? (['remote', 'hybrid', 'onsite'] as const).filter((m) => profile.workModes!.includes(m))
+    : [];
+  if (locs.length || modes.length) {
+    const parts: string[] = [];
+    if (locs.length) parts.push(locs.join(', '));
+    if (modes.length) parts.push(modes.join(', '));
+    lines.push(`Locations: ${parts.join(' · ')}`);
+  }
+  const noGos = typeof profile.noGos === 'string' ? profile.noGos.trim() : '';
+  if (noGos) {
+    lines.push(`No-gos: ${noGos}`);
+  }
+  const legacy = typeof profile.preferences === 'string' ? profile.preferences.trim() : '';
+  if (legacy && legacy !== noGos) {
+    lines.push(`Additional preferences: ${legacy}`);
+  }
+  return lines;
+}
+
 function rethrowParlyError(err: unknown): never {
   if (err instanceof TalentError) throw err;
   if (err instanceof ParlyError) {
@@ -279,11 +314,12 @@ export class TalentRoomViews {
       .filter(Boolean)
       .join('\n');
 
+    const preferenceLines = formatCandidatePreferencesBrief(candidateProfile);
     const candidateBriefText = [
       candidateProfile.publicSummary,
       candidateProfile.openTo ? `Open to: ${candidateProfile.openTo}` : '',
-      candidateProfile.preferences
-        ? `Private candidate preferences (never quote raw text; use to evaluate fit and decide): ${candidateProfile.preferences}`
+      preferenceLines.length
+        ? `Private candidate preferences (never quote raw text; use to evaluate fit and decide):\n${preferenceLines.join('\n')}`
         : '',
     ]
       .filter(Boolean)

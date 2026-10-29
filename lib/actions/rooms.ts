@@ -7,7 +7,7 @@ import { roomViews } from '../roomViews.ts';
 async function requirePersonId(): Promise<string> {
   const session = await currentSession();
   if (!session) throw new TalentError('unauthorized', 'Sign in first');
-  return String(session.githubId);
+  return session.sub;
 }
 
 export async function openTalentRoom(

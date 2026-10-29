@@ -6,7 +6,7 @@ import { profiles, workEmail, type TalentProfile } from '../talent.ts';
 async function requirePersonId(): Promise<string> {
   const session = await currentSession();
   if (!session) throw new TalentError('unauthorized', 'Sign in first');
-  return String(session.githubId);
+  return session.sub;
 }
 
 export async function saveTalentProfile(body: unknown): Promise<{ profile: TalentProfile; error?: never } | { error: string; profile?: never }> {

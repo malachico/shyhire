@@ -1,13 +1,23 @@
 'use client';
 import { useState } from 'react';
-import type { Experience, ProfileDraft, TalentProfile } from '@/lib/talent';
+import type { Experience, ProfileDraft, TalentProfile, WorkMode } from '@/lib/talent';
 import { saveTalentProfile } from '@/lib/actions/talent';
 
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'ILS', 'CAD', 'AUD', 'CHF', 'SGD'] as const;
+const WORK_MODES: { mode: WorkMode; label: string }[] = [
+  { mode: 'remote', label: 'Remote' },
+  { mode: 'hybrid', label: 'Hybrid' },
+  { mode: 'onsite', label: 'Onsite' },
+];
+
 /** Owner-only editor. The anonymous room summary is computed on the server, never from client-supplied prose. */
-export function TalentProfileEditor({ initial, error: initialError, linkedinAvailable = false, workEmailAvailable = false, importAvailable = true }: { initial: TalentProfile; error?: string; linkedinAvailable?: boolean; workEmailAvailable?: boolean; importAvailable?: boolean }) {
+export function TalentProfileEditor({ initial, error: initialError, githubAvailable = true, linkedinAvailable = false, workEmailAvailable = false, importAvailable = true }: { initial: TalentProfile; error?: string; githubAvailable?: boolean; linkedinAvailable?: boolean; workEmailAvailable?: boolean; importAvailable?: boolean }) {
   const [profile, setProfile] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [domains, setDomains] = useState(initial.employerDomains.join(', '));
+  const [locationsText, setLocationsText] = useState((initial.locations ?? []).join(', '));
+  const [salaryMinInput, setSalaryMinInput] = useState(initial.salary?.min !== undefined ? String(initial.salary.min) : initial.salaryMin !== undefined ? String(initial.salaryMin) : '');
+  const [salaryCurrency, setSalaryCurrency] = useState(initial.salary?.currency || initial.salaryCurrency || 'USD');
   const [source, setSource] = useState('');
   const [file, setFile] = useState<File>();
   const [draft, setDraft] = useState<ProfileDraft>();
@@ -15,16 +25,30 @@ export function TalentProfileEditor({ initial, error: initialError, linkedinAvai
   const [error, setError] = useState(initialError ?? '');
   const [notice, setNotice] = useState('');
   const employerDomains = domains.split(',').map((v) => v.trim()).filter(Boolean);
-  const dirty = JSON.stringify({ ...profile, employerDomains }) !== JSON.stringify(saved);
+  const locations = locationsText.split(',').map((v) => v.trim()).filter(Boolean);
+  const parsedMin = salaryMinInput.trim() ? Number(salaryMinInput.trim()) : undefined;
+  const salary = parsedMin !== undefined && Number.isFinite(parsedMin) ? { min: parsedMin, currency: salaryCurrency } : { currency: salaryCurrency };
+  const dirty = JSON.stringify({ ...profile, salary, salaryMin: parsedMin, salaryCurrency, locations, employerDomains }) !== JSON.stringify({ ...saved, salary: saved.salary ?? { currency: saved.salaryCurrency || 'USD' } });
   const change = (fields: Partial<TalentProfile>) => { setProfile((p) => ({ ...p, ...fields })); setNotice(''); };
   const role = (id: string, fields: Partial<Experience>) => change({ experience: profile.experience.map((r) => r.id === id ? { ...r, ...fields } : r) });
+  const toggleWorkMode = (mode: WorkMode, checked: boolean) => {
+    const current = new Set(profile.workModes ?? []);
+    if (checked) current.add(mode); else current.delete(mode);
+    change({ workModes: WORK_MODES.map((w) => w.mode).filter((m) => current.has(m)) });
+  };
   const save = async () => {
     setBusy(true); setError(''); setNotice('');
     try {
-      const { version, headline, about, experience, openTo, preferences } = profile;
-      const result = await saveTalentProfile({ version, headline, about, experience, openTo, preferences, employerDomains });
+      const { version, headline, about, experience, openTo, workModes, noGos } = profile;
+      const result = await saveTalentProfile({ version, headline, about, experience, openTo, salary: { min: salaryMinInput.trim() ? Number(salaryMinInput.trim()) : null, currency: salaryCurrency }, locations, workModes, noGos, employerDomains });
       if (result.error) setError(result.error);
-      else if (result.profile) { setProfile(result.profile); setSaved(result.profile); setDomains(result.profile.employerDomains.join(', ')); setNotice('Profile saved. Your anonymous preview is up to date.'); }
+      else if (result.profile) {
+        setProfile(result.profile); setSaved(result.profile); setDomains(result.profile.employerDomains.join(', '));
+        setLocationsText(result.profile.locations.join(', '));
+        setSalaryMinInput(result.profile.salary.min !== undefined ? String(result.profile.salary.min) : '');
+        setSalaryCurrency(result.profile.salary.currency);
+        setNotice('Profile saved. Your anonymous preview is up to date.');
+      }
     } catch { setError('Could not save. Your edits are still here; try again.'); }
     finally { setBusy(false); }
   };
@@ -46,11 +70,17 @@ export function TalentProfileEditor({ initial, error: initialError, linkedinAvai
     {notice && <p role="status" className="mb-5 text-sm text-[var(--fg)]">{notice}</p>}
     <section aria-label="Connect your professional sources" className="mb-9">
       <h2 className="mb-4 text-xl font-semibold">Connect your sources</h2>
-      <div className="grid gap-3 sm:grid-cols-3">{[
-        { source: 'github', title: 'GitHub', href: '/talent/auth/github/start', detail: 'Public activity and technologies' },
-        { source: 'linkedin', title: 'LinkedIn', href: '/talent/auth/linkedin/start', detail: 'Account connection, not employment verification' },
-        { source: 'work-email', title: 'Work email', href: '/talent/verify/work-email', detail: 'Private mailbox verification' },
-      ].map((item) => item.source === 'linkedin' && !linkedinAvailable ? <div key={item.source} aria-disabled="true" className="rounded-xl border border-[var(--border)] p-5"><span className="block text-lg font-semibold">LinkedIn</span><span className="mt-2 block text-sm text-[var(--muted)]">Not available yet. You can still use a CV or export.</span></div> : item.source === 'work-email' && !workEmailAvailable ? <div key={item.source} aria-disabled="true" className="rounded-xl border border-[var(--border)] p-5"><span className="block text-lg font-semibold">Work email</span><span className="mt-2 block text-sm text-[var(--muted)]">Not available yet. You can still block domains below.</span></div> : <a key={item.source} href={item.href} className="rounded-xl border border-[var(--border)] p-5 transition-colors hover:bg-[var(--accent-bg)]"><span className="block text-lg font-semibold">{profile.verified.some((v) => v.source === item.source) ? '✓ ' : item.source === 'work-email' ? 'Verify ' : 'Connect '}{item.title}</span><span className="mt-2 block text-sm text-[var(--muted)]">{item.detail}</span></a>)}</div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {githubAvailable ? (
+          <a href="/talent/auth/github/start" className="rounded-xl border border-[var(--border)] p-5 transition-colors hover:bg-[var(--accent-bg)]"><span className="block text-lg font-semibold">{profile.verified.some((v) => v.source === 'github') ? '✓ GitHub connected' : 'Connect GitHub'}</span><span className="mt-2 block text-sm text-[var(--muted)]">Public activity and technologies</span></a>
+        ) : (
+          <div aria-disabled="true" className="rounded-xl border border-[var(--border)] p-5"><span className="block text-lg font-semibold">Connect GitHub</span><span className="mt-2 block text-sm text-[var(--muted)]">Not configured yet.</span></div>
+        )}
+        <a href="#source-title" className="rounded-xl border border-[var(--border)] p-5 transition-colors hover:bg-[var(--accent-bg)]"><span className="block text-lg font-semibold">Upload CV</span><span className="mt-2 block text-sm text-[var(--muted)]">Import experience from a PDF or pasted CV text</span></a>
+        {linkedinAvailable && (
+          <a href="/talent/auth/linkedin/start" className="rounded-xl border border-[var(--border)] p-5 transition-colors hover:bg-[var(--accent-bg)]"><span className="block text-lg font-semibold">{profile.verified.some((v) => v.source === 'linkedin') ? '✓ LinkedIn connected' : 'Connect LinkedIn'}</span><span className="mt-2 block text-sm text-[var(--muted)]">Account connection, not employment verification</span></a>
+        )}
+      </div>
       <p className="mt-3 text-xs text-[var(--muted)]">Connections are optional. Save any edits before leaving this page. GitHub activity does not establish employment.</p>
     </section>
     <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -72,7 +102,106 @@ export function TalentProfileEditor({ initial, error: initialError, linkedinAvai
           <button className="btn" disabled={profile.experience.length >= 40} onClick={() => change({ experience: [...profile.experience, { id: crypto.randomUUID(), title: '', company: '', start: '', end: '', description: '', hidden: false, source: 'self' }] })}>Add experience</button>
           <label className="block text-sm">Open to<input aria-label="Open to" className={`${input} mt-1`} maxLength={500} placeholder="Senior backend roles, remote" value={profile.openTo} onChange={(e) => change({ openTo: e.target.value })} /></label>
         </fieldset></section>
-        <section aria-labelledby="limits-title"><h2 id="limits-title" className="text-xl font-semibold">Private preferences</h2><p className="mt-2 text-sm text-[var(--muted)]">Only your representative uses these limits in room screening. Companies don&apos;t receive this text.</p><label className="mt-3 block text-sm">Salary, locations and no-gos<textarea aria-label="Private preferences" className={`${input} mt-1 min-h-24`} maxLength={1000} disabled={busy} value={profile.preferences} onChange={(e) => change({ preferences: e.target.value })} /></label><label className="mt-3 block text-sm">Block employers by domain<input aria-label="Blocked employer domains" className={`${input} mt-1`} disabled={busy} placeholder="example.com, another.com" value={domains} onChange={(e) => { setDomains(e.target.value); setNotice(''); }} /></label><p className="mt-1 text-xs text-[var(--muted)]">Verified work domains stay blocked automatically.</p></section>
+        <section aria-labelledby="limits-title">
+          <h2 id="limits-title" className="text-xl font-semibold">Private preferences</h2>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Only your representative uses these limits in room screening. Companies don&apos;t receive this text.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_140px]">
+            <label className="block text-sm">
+              Minimum salary (annual)
+              <input
+                aria-label="Minimum salary"
+                type="number"
+                min={1}
+                max={10000000}
+                step={1000}
+                placeholder="180000"
+                className={`${input} mt-1`}
+                disabled={busy}
+                value={salaryMinInput}
+                onChange={(e) => {
+                  setSalaryMinInput(e.target.value);
+                  setNotice('');
+                }}
+              />
+            </label>
+            <label className="block text-sm">
+              Currency
+              <select
+                aria-label="Salary currency"
+                className={`${input} mt-1`}
+                disabled={busy}
+                value={salaryCurrency}
+                onChange={(e) => {
+                  setSalaryCurrency(e.target.value);
+                  setNotice('');
+                }}
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="mt-4">
+            <label className="block text-sm">
+              Locations
+              <input
+                aria-label="Locations"
+                className={`${input} mt-1`}
+                disabled={busy}
+                placeholder="New York, London, Tel Aviv"
+                value={locationsText}
+                onChange={(e) => {
+                  setLocationsText(e.target.value);
+                  setNotice('');
+                }}
+              />
+            </label>
+            <div className="mt-2 flex flex-wrap gap-4 text-sm">
+              {WORK_MODES.map(({ mode, label }) => (
+                <label key={mode} className="inline-flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    aria-label={label}
+                    disabled={busy}
+                    checked={(profile.workModes ?? []).includes(mode)}
+                    onChange={(e) => toggleWorkMode(mode, e.target.checked)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <label className="mt-4 block text-sm">
+            No-gos
+            <textarea
+              aria-label="No-gos"
+              className={`${input} mt-1 min-h-24`}
+              maxLength={1000}
+              disabled={busy}
+              placeholder="Industries, on-call limits, travel limits, or dealbreakers"
+              value={profile.noGos ?? ''}
+              onChange={(e) => change({ noGos: e.target.value })}
+            />
+          </label>
+          <label className="mt-4 block text-sm">
+            Block employers by domain
+            <input
+              aria-label="Blocked employer domains"
+              className={`${input} mt-1`}
+              disabled={busy}
+              placeholder="example.com, another.com"
+              value={domains}
+              onChange={(e) => {
+                setDomains(e.target.value);
+                setNotice('');
+              }}
+            />
+          </label>
+          <p className="mt-1 text-xs text-[var(--muted)]">Verified work domains stay blocked automatically.</p>
+        </section>
         <div className="flex flex-wrap items-center gap-4 border-t border-[var(--border)] pt-5"><button className="btn-primary" disabled={busy || (!dirty && profile.version > 0)} onClick={() => void save()}>{busy ? 'Working…' : 'Save profile'}</button>{dirty && <span className="text-sm text-[var(--muted)]">Unsaved changes</span>}</div>
       </div>
       <aside className="min-w-0 space-y-6 lg:sticky lg:top-8"><section aria-label="Anonymous preview" className="rounded-2xl bg-[#15263d] p-6 text-white"><p className="text-sm text-slate-300">What room agents can see</p><h2 className="mt-3 break-all text-xl font-semibold">{saved.alias || 'Your candidate alias'}</h2><p className="mt-4 text-sm leading-relaxed text-slate-100">{saved.publicSummary || 'Save your profile to generate an anonymous summary.'}</p><p className="mt-5 border-t border-white/20 pt-4 text-xs leading-relaxed text-slate-300">Your name, company names, profile links and private preferences are excluded. {dirty && 'Save to refresh this preview.'}</p></section>

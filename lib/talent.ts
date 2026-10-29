@@ -6,7 +6,7 @@ import { Composio, TalentLinkedIn } from './linkedin.ts';
 import { firestoreLlmMeter, Profiles, vertexProfileImporter } from './profiles.ts';
 import { noticeMailer, WorkEmailVerification } from './workEmail.ts';
 
-export type { CandidateCard, CandidateSearch, Experience, ProfileDraft, TalentProfile, Verification } from './types.ts';
+export type { CandidateCard, CandidateSearch, Experience, ProfileDraft, SalaryPreference, TalentProfile, Verification, WorkMode } from './types.ts';
 
 let cachedProfiles: Profiles | undefined;
 

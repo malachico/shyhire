@@ -13,7 +13,7 @@ export default async function CompanyRoomsPage() {
   let rooms: CompanyRoomSummary[] = [];
   let error: string | undefined;
   try {
-    rooms = await roomViews().listCompanyRooms(String(session.githubId));
+    rooms = await roomViews().listCompanyRooms(session.sub);
   } catch (e) {
     if (!(e instanceof TalentError)) throw e;
     error = e.message;

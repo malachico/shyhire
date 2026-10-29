@@ -357,6 +357,60 @@ describe('Talent company rooms (C) and candidate requests (D)', () => {
     assert.equal(afterCand.revealedContact?.githubLogin, 'acme-cto');
     assert.equal(afterCand.revealedContact?.email, 'cto@acme.io');
   });
+
+  it('sends split private preferences (salary, locations + workModes, noGos) as separate lines in the candidate brief', async () => {
+    const db = testDb();
+    const { Profiles } = await import('../lib/profiles.ts');
+    const profiles = new Profiles(db);
+
+    const companySub = 'google-sub-company-split';
+    const candidateSub = 'google-sub-candidate-split';
+
+    await profiles.verify(companySub, {
+      id: 'work-email:hiring.io',
+      source: 'work-email',
+      label: 'Work email verified',
+      verifiedAt: '2026-10-29T05:00:00.000Z',
+      data: { domain: 'hiring.io' },
+    });
+
+    const savedCand = await profiles.save(candidateSub, {
+      version: 0,
+      headline: 'Staff Backend Engineer',
+      about: 'Go, PostgreSQL, Kubernetes',
+      openTo: 'Staff backend engineering',
+      salary: { min: 195000, currency: 'USD' },
+      locations: ['New York', 'London'],
+      workModes: ['remote', 'hybrid'],
+      noGos: 'No ad-tech or heavy travel',
+      experience: [
+        { title: 'Backend Engineer', company: 'PrivateCo', start: '2019-01', end: '2024-01', description: 'Go and PostgreSQL', hidden: false },
+      ],
+    });
+
+    const openedCalls: { goal: string; sides: { ref: string; name: string; brief: string; agent: string }[] }[] = [];
+    const { client } = fakeParlyClient({});
+    client.createAgent = async (key, name) => ({ key, name });
+    client.openRoom = async (body) => {
+      openedCalls.push(body);
+      return { id: 'parly-room-split', status: 'talking' };
+    };
+
+    const views = new TalentRoomViews(db, client);
+    await views.openRoom(companySub, {
+      candidateAlias: savedCand.alias,
+      brief: { role: 'Staff Go Engineer', comp: '$190k–$220k', mustHaves: 'Go, Postgres' },
+    });
+
+    assert.equal(openedCalls.length, 1);
+    const candSide = openedCalls[0]!.sides.find((s) => s.ref === 'candidate')!;
+    const briefLines = candSide.brief.split('\n');
+    assert.equal(briefLines.includes('Salary: minimum 195000 USD'), true);
+    assert.equal(briefLines.includes('Locations: New York, London · remote, hybrid'), true);
+    assert.equal(briefLines.includes('No-gos: No ad-tech or heavy travel'), true);
+    assert.doesNotMatch(candSide.brief, /google-sub-candidate-split|PrivateCo/);
+  });
 });
+
 
 

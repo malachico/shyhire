@@ -18,8 +18,8 @@ export async function GET() {
   }
   const state = randomBytes(24).toString('hex');
   try {
-    const result = await linkedin.connect(String(session.githubId), state);
-    (await cookies()).set('talent_linkedin', JSON.stringify({ state, githubId: session.githubId }), {
+    const result = await linkedin.connect(session.sub, state);
+    (await cookies()).set('talent_linkedin', JSON.stringify({ state, personId: session.sub }), {
       httpOnly: true, sameSite: 'lax', secure: base.startsWith('https:'), path: '/talent/auth/linkedin', maxAge: 600,
     });
     return NextResponse.redirect(result.url);
