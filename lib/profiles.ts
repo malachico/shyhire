@@ -487,20 +487,22 @@ export class Profiles {
     const sub = typeof rawSub === 'string' ? rawSub.trim() : '';
     const initial = await this.mine(id);
     const write = async (tx: Transaction) => {
-      const ref = this.col.doc(id);
       const claimRef = (item.source === 'linkedin' || item.source === 'github') && sub
         ? this.db.collection('talent_claims').doc(`${item.source}:${sub}`)
         : undefined;
-      const [profileDoc, claimDoc] = claimRef ? await tx.getAll(ref, claimRef) : [await tx.get(ref), undefined];
-      if (claimDoc?.exists) {
+      if (claimRef) {
+        const claimDoc = await tx.get(claimRef);
         const existing = claimDoc.data() as { personId?: string } | undefined;
         if (existing?.personId && existing.personId !== id) {
           const providerLabel = item.source === 'linkedin' ? 'LinkedIn' : 'GitHub';
           throw new TalentError('conflict', `This ${providerLabel} account is already connected to another profile`);
         }
       }
+      const allocatedAlias = await this.alias(tx, initial.alias);
+      const ref = this.col.doc(id);
+      const profileDoc = await tx.get(ref);
       const current = normalizeProfile(id, (profileDoc.data() as Partial<TalentProfile> | undefined) ?? initial);
-      const next: TalentProfile = { ...current, alias: await this.alias(tx, current.alias), verified: [...current.verified.filter((v) => v.id !== item.id), item], version: current.version + 1, updatedAt: new Date().toISOString() };
+      const next: TalentProfile = { ...current, alias: current.alias || allocatedAlias, verified: [...current.verified.filter((v) => v.id !== item.id), item], version: current.version + 1, updatedAt: new Date().toISOString() };
       next.verified = next.verified.map(professionalVerification);
       Object.assign(next, professionalDraft(next));
       next.employerDomains = [...new Set([...next.employerDomains, ...verifiedDomains(next.verified)])];
@@ -510,7 +512,19 @@ export class Profiles {
       }
       tx.set(ref, next);
     };
-    if (transaction) await write(transaction); else await this.db.runTransaction(write);
+    if (transaction) {
+      await write(transaction);
+    } else {
+      try {
+        await this.db.runTransaction(write);
+      } catch (err) {
+        if (err instanceof Error && /Transaction is invalid or closed/i.test(err.message)) {
+          await this.db.runTransaction(write);
+        } else {
+          throw err;
+        }
+      }
+    }
   }
   async recordContact(
     personId: string,
