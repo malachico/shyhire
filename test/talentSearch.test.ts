@@ -36,7 +36,7 @@ describe('Talent anonymous candidate search', () => {
     const result = await profiles.search(company, 'Backend engineer Python TypeScript');
     assert.equal(result.profiles.length, 2);
     assert.equal(result.profiles[0]!.alias, saved.alias);
-    assert.deepEqual(Object.keys(result.profiles[0]!).sort(), ['alias', 'badges', 'openTo', 'publicSummary']);
+    assert.deepEqual(Object.keys(result.profiles[0]!).sort(), ['alias', 'badges', 'facts', 'openTo', 'publicSummary']);
     assert.deepEqual(result.profiles[0]!.badges, ['github']);
     assert.equal(result.profiles[0]!.openTo, 'Backend engineer, Remote');
     assert.doesNotMatch(JSON.stringify(result), /Private Name|private@|identity.test|salary|100000|secret-employer|blocked.test|private-login/);

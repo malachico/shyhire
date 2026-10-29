@@ -1,7 +1,7 @@
 'use server';
 import { currentSession } from '../auth.ts';
 import { TalentError } from '../profiles.ts';
-import { profiles, workEmail, type TalentProfile } from '../talent.ts';
+import { profiles, workEmail, type Fact, type TalentProfile } from '../talent.ts';
 
 async function requirePersonId(): Promise<string> {
   const session = await currentSession();
@@ -21,7 +21,7 @@ export async function saveTalentProfile(body: unknown): Promise<{ profile: Talen
 }
 
 /** The AI rewrites what companies see from the fields on screen and what is verified. */
-export async function writeSummary(body: unknown): Promise<{ summary: string; leaks: string[]; error?: never } | { error: string }> {
+export async function writeSummary(body: unknown): Promise<{ facts: Fact[]; leaks: string[]; error?: never } | { error: string }> {
   try {
     const session = await currentSession();
     if (!session) throw new TalentError('unauthorized', 'Sign in first');

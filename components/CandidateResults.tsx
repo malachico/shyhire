@@ -40,7 +40,12 @@ export function CandidateResults({ results, query, existing }: { results: Candid
               ? <a href={`/talent/conversations/${encodeURIComponent(talking.id)}`} className="pill pill-accent">{talking.label} →</a>
               : <button type="button" className="btn-primary min-h-9 text-sm" onClick={() => { setAlias(p.alias); setError(undefined); }}>Talk</button>}
           </div>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{p.publicSummary}</p>
+          {p.facts?.length
+            ? <ul className="mt-2 space-y-1 text-sm leading-relaxed">{p.facts.map((f) => <li key={f.id} className="flex gap-2">
+                <span aria-hidden className={f.source === 'cv' ? 'muted' : 'text-[#12b76a]'}>{f.source === 'cv' ? '•' : '✓'}</span>
+                <span>{f.text}{f.source !== 'cv' && <span className="muted text-xs"> · verified</span>}</span>
+              </li>)}</ul>
+            : <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{p.publicSummary}</p>}
           {!!p.badges.length && <ul aria-label="Verified" className="mt-3 flex flex-wrap gap-1.5">{p.badges.map((b) => <li key={b} className="pill">✓ {BADGES[b] ?? 'Verified'}</li>)}</ul>}
           {p.openTo && <p className="muted mt-3 text-sm">Open to: {p.openTo}</p>}
         </li>;

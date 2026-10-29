@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import type { Experience, ProfileDraft, TalentProfile, WorkMode } from '@/lib/talent';
+import type { Experience, Fact, ProfileDraft, TalentProfile, WorkMode } from '@/lib/talent';
 import { saveTalentProfile, setDiscoverable, writeSummary } from '@/lib/actions/talent';
 import { privacyLeaks } from '@/lib/privacy';
 import { Mark } from '@/components/Brand';
@@ -11,10 +11,12 @@ const WORK_MODES: { mode: WorkMode; label: string }[] = [
   { mode: 'hybrid', label: 'Hybrid' },
   { mode: 'onsite', label: 'Onsite' },
 ];
+const SOURCE: Record<Fact['source'], string> = { cv: 'CV', github: 'GitHub', linkedin: 'LinkedIn', 'work-email': 'Work email', stripe: 'Stripe', vercel: 'Vercel' };
 const list = (s: string) => s.split(',').map((v) => v.trim()).filter(Boolean);
 
 type Props = {
   initial: TalentProfile;
+  verifiedFacts: Fact[];
   me: { name: string; email: string };
   error?: string;
   githubAvailable?: boolean;
@@ -25,10 +27,10 @@ type Props = {
 
 /**
  * The candidate's profile. A new one goes through three steps (experience, check it, what matters); a saved one
- * shows what companies see, the connections, and the same fields to edit. What companies see is free text the AI
- * writes from the profile and what is verified; the person can edit it, and the server refuses it if it names them.
+ * shows what companies see, the connections, and the same fields to edit. Companies see a list of facts: verified ones
+ * come from checked data (they can only hide them); their own CV facts the AI suggests and they edit freely.
  */
-export function TalentProfileEditor({ initial, me, error: initialError, githubAvailable = true, linkedinAvailable = true, workEmailAvailable = false, importAvailable = true }: Props) {
+export function TalentProfileEditor({ initial, verifiedFacts, me, error: initialError, githubAvailable = true, linkedinAvailable = true, workEmailAvailable = false, importAvailable = true }: Props) {
   const [profile, setProfile] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [step, setStep] = useState<1 | 2 | 3>(initial.headline || initial.experience.length ? 2 : 1);
@@ -50,13 +52,13 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
     if (on) s.add(mode); else s.delete(mode);
     change({ workModes: WORK_MODES.map((w) => w.mode).filter((m) => s.has(m)) });
   };
-  const leaks = privacyLeaks(profile.publicSummary, me, list(domains)); // ponytail: employer names are checked on save
+  const leaks = privacyLeaks(profile.facts.map((f) => f.text).join('\n'), me, list(domains)); // ponytail: employer names are checked on save
 
   async function save(): Promise<boolean> {
     setBusy(true); setError(''); setNotice('');
     try {
-      const { version, headline, about, publicSummary, experience, openTo, workModes, noGos } = profile;
-      const r = await saveTalentProfile({ version, headline, about, publicSummary, experience, openTo, salary: { min: salaryMin.trim() ? Number(salaryMin) : null, currency }, locations: list(locationsText), workModes, noGos, employerDomains: list(domains) });
+      const { version, headline, about, facts, hiddenFacts, experience, openTo, workModes, noGos } = profile;
+      const r = await saveTalentProfile({ version, headline, about, facts, hiddenFacts, experience, openTo, salary: { min: salaryMin.trim() ? Number(salaryMin) : null, currency }, locations: list(locationsText), workModes, noGos, employerDomains: list(domains) });
       if (r.error || !r.profile) { setError(r.error ?? 'Could not save.'); return false; }
       setProfile(r.profile); setSaved(r.profile);
       setDomains(r.profile.employerDomains.join(', ')); setLocationsText(r.profile.locations.join(', '));
@@ -86,7 +88,7 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
       const { headline, about, experience, openTo } = profile;
       const r = await writeSummary({ headline, about, experience, openTo });
       if ('error' in r && r.error) setError(r.error);
-      else if ('summary' in r) change({ publicSummary: r.summary });
+      else if ('facts' in r) change({ facts: r.facts });
     } catch { setError('Could not write it. Try again, or write it yourself.'); }
     finally { setBusy(false); }
   }
@@ -159,8 +161,24 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
   const preview = <section aria-label="What companies see" className="rounded-[18px] bg-[var(--ink)] p-[18px] text-[var(--bg)]">
     <p className="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--sun)]"><Mark size={30} flower={false} look="ahead" body="#3a3a3a" />What companies see</p>
     <p className="mt-2 text-[17px] font-semibold">{saved.alias || 'Candidate #…'}</p>
-    <textarea aria-label="What companies see" className="mt-1 block min-h-36 w-full resize-y rounded-lg border border-[#3a3a3a] bg-transparent p-2 text-sm leading-relaxed text-[#DDD6CA] placeholder:text-[#8a847a]" maxLength={1500} disabled={busy} value={profile.publicSummary} onChange={(e) => change({ publicSummary: e.target.value })} placeholder="• Led a payments ledger rewrite in Go (CV)&#10;• 31 merged public PRs (GitHub, verified)" />
-    {!!leaks.length && <p role="alert" className="mt-2 rounded-lg bg-[#fffaeb] p-2 text-xs text-[#93370d]">This mentions {leaks.join(', ')}. Companies see this text, so remove it before saving.</p>}
+    <ul className="mt-2 space-y-2 text-sm leading-relaxed text-[#DDD6CA]">
+      {verifiedFacts.map((f) => {
+        const hidden = profile.hiddenFacts.includes(f.id);
+        return <li key={f.id} className={`flex items-start gap-2 ${hidden ? 'opacity-40 line-through' : ''}`}>
+          <span aria-hidden className="text-[var(--sun)]">✓</span>
+          <span className="flex-1">{f.text} <span className="text-xs text-[#A8A196]">· {SOURCE[f.source]}</span></span>
+          <button type="button" className="text-xs text-[#A8A196] underline" disabled={busy} onClick={() => change({ hiddenFacts: hidden ? profile.hiddenFacts.filter((id) => id !== f.id) : [...profile.hiddenFacts, f.id] })}>{hidden ? 'Show' : 'Hide'}</button>
+        </li>;
+      })}
+      {profile.facts.map((f) => <li key={f.id} className="flex items-start gap-2">
+        <span aria-hidden>•</span>
+        <textarea aria-label="Fact" rows={1} className="field-sizing-content flex-1 resize-none rounded border border-[#3a3a3a] bg-transparent px-1.5 py-0.5 text-[#DDD6CA]" maxLength={300} disabled={busy} value={f.text} onChange={(e) => change({ facts: profile.facts.map((x) => (x.id === f.id ? { ...x, text: e.target.value } : x)) })} />
+        <button type="button" aria-label="Remove fact" className="text-xs text-[#A8A196] underline" disabled={busy} onClick={() => change({ facts: profile.facts.filter((x) => x.id !== f.id) })}>Remove</button>
+      </li>)}
+    </ul>
+    {!verifiedFacts.length && !profile.facts.length && <p className="mt-2 text-sm text-[#8a847a]">No facts yet. Let the AI write them from your CV, or add your own.</p>}
+    {profile.facts.length < 10 && <button type="button" className="mt-2 text-xs text-[#DDD6CA] underline" disabled={busy} onClick={() => change({ facts: [...profile.facts, { id: crypto.randomUUID(), text: '', source: 'cv' }] })}>+ Add a fact</button>}
+    {!!leaks.length && <p role="alert" className="mt-2 rounded-lg bg-[#fffaeb] p-2 text-xs text-[#93370d]">This mentions {leaks.join(', ')}. Companies see these facts, so remove it before saving.</p>}
     <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
       <p className="text-xs text-[#A8A196]">No name, employers, links or private preferences.{onboarded && dirty && ' Save to update.'}</p>
       {importAvailable && <button type="button" className="text-xs font-semibold text-[var(--sun)] underline" disabled={busy} onClick={() => void rewrite()}>{busy ? 'Writing…' : 'Rewrite from my data'}</button>}

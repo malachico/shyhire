@@ -3,6 +3,7 @@ import { currentSession } from '@/lib/auth';
 import { githubConfigured } from '@/lib/github';
 import { linkedinConfigured } from '@/lib/linkedin';
 import { profileImportConfigured, profiles, workEmailConfigured } from '@/lib/talent';
+import { verifiedFacts } from '@/lib/profiles';
 import { TalentProfileEditor } from '@/components/TalentProfileEditor';
 
 export const dynamic = 'force-dynamic';
@@ -11,8 +12,10 @@ export default async function Profile({ searchParams }: { searchParams: Promise<
   const session = await currentSession();
   if (!session) redirect('/');
   const { error } = await searchParams;
+  const initial = await profiles().mine(session.sub);
   return <TalentProfileEditor
-    initial={await profiles().mine(session.sub)}
+    initial={initial}
+    verifiedFacts={verifiedFacts(initial)}
     me={{ name: session.name ?? '', email: session.email ?? '' }}
     error={error}
     githubAvailable={githubConfigured()}

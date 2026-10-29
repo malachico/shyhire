@@ -59,15 +59,20 @@ describe('Talent professional profile generation', () => {
     await profiles.verify(person.id, { id: 'github', source: 'github', label: 'Private Name', verifiedAt: new Date().toISOString(), data: { login: 'PrivateName', repositories: ['identifying-repo'], languages: ['Python'], mergedPublicPullRequests: 7 } });
     await profiles.verify(person.id, { id: 'linkedin', source: 'linkedin', label: 'x', verifiedAt: new Date().toISOString(), data: { name: 'Jane Private', email: 'jane@example.test', sub: 'li-1' } }, undefined, 'li-1');
     const seen: Record<string, unknown>[] = [];
-    profiles.summarizer = async (_id, data) => { seen.push(data); return 'Jane is a senior Python engineer with 7 merged public PRs.'; };
+    profiles.summarizer = async (_id, data) => { seen.push(data); return ['Jane is a senior Python engineer', 'Built a billing service.']; };
     const result = await profiles.summarize(person, { headline: 'Python engineer', experience: privateDraft.experience });
-    assert.match(result.summary, /senior Python/);
+    assert.deepEqual(result.facts.map((f) => [f.text, f.source]), [['Jane is a senior Python engineer', 'cv'], ['Built a billing service.', 'cv']]);
     assert.deepEqual(result.leaks, ['your name']);
     const sent = JSON.stringify(seen[0]);
-    assert.match(sent, /Python engineer/); assert.match(sent, /mergedPublicPullRequests/);
-    assert.doesNotMatch(sent, /"company"|PrivateName|identifying-repo|Jane Private|jane@example/);
+    assert.match(sent, /Python engineer/);
+    assert.doesNotMatch(sent, /"company"|PrivateName|identifying-repo|Jane Private|jane@example|merged/);
     const draft = await profiles.draft(person, {});
-    assert.equal(draft.publicSummary, 'Jane is a senior Python engineer with 7 merged public PRs.');
+    assert.equal(draft.facts?.length, 2);
+    const saved = await profiles.save(person, { version: (await profiles.mine(person)).version, facts: [{ text: 'Built a billing service' }, { text: 'Fake claim', source: 'github', id: 'github-activity' }], hiddenFacts: ['github-languages'] });
+    assert.deepEqual(saved.facts.map((f) => f.source), ['cv', 'cv']);
+    assert.match(saved.publicSummary, /✓ 7 merged public pull requests \(GitHub, verified\)/);
+    assert.doesNotMatch(saved.publicSummary, /Writes Python/);
+    assert.match(saved.publicSummary, /• Fake claim \(CV\)/);
     assert.deepEqual(draft.experience, []);
   });
 
@@ -158,7 +163,7 @@ describe('Talent LinkedIn OpenID Connect account connection', () => {
     assert.ok(liVer);
     assert.equal(liVer.label, 'LinkedIn account');
     assert.deepEqual(liVer.data, { name: 'Jane Candidate', email: 'jane.candidate@example.test' });
-    assert.match(mine.publicSummary, /LinkedIn account verified\./);
+    assert.match(mine.publicSummary, /Has a verified LinkedIn account/);
     assert.doesNotMatch(mine.publicSummary, /Jane Candidate|jane\.candidate|example\.test|linkedin-sub/);
 
     const searcher = testPerson('Recruiter');

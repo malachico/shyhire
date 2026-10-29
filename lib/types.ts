@@ -25,6 +25,13 @@ export interface SalaryPreference {
   currency: string;
 }
 
+/** One line companies see. Verified facts are built from checked data on the server; anything a person writes is 'cv'. */
+export interface Fact {
+  id: string;
+  text: string;
+  source: 'cv' | Verification['source'];
+}
+
 export interface TalentProfile {
   searchable?: boolean;
   /** The candidate paused matching: kept across saves; search and new rooms skip them. */
@@ -32,6 +39,10 @@ export interface TalentProfile {
   personId: string;
   alias: string;
   publicSummary: string;
+  /** The person's own (CV) facts; verified facts are computed from `verified`. */
+  facts: Fact[];
+  /** Ids of verified facts the person chose not to show. */
+  hiddenFacts: string[];
   headline: string;
   about: string;
   experience: Experience[];
@@ -53,14 +64,15 @@ export interface ProfileDraft {
   headline: string;
   about: string;
   experience: Experience[];
-  /** The AI's suggestion for what companies see, when it could write one. */
-  publicSummary?: string;
+  /** The AI's suggested CV facts, when it could write them. */
+  facts?: Fact[];
 }
 
 /** The only candidate fields companies receive before a match. */
 export interface CandidateCard {
   alias: string;
   publicSummary: string;
+  facts: Fact[];
   badges: Verification['source'][];
   openTo: string;
 }

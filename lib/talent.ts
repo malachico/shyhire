@@ -3,7 +3,7 @@ import { db, DEFAULT_GCP_PROJECT_ID, gcpAccessToken } from './db.ts';
 import { firestoreLlmMeter, Profiles, vertexProfileImporter, vertexSummaryWriter } from './profiles.ts';
 import { noticeMailer, WorkEmailVerification } from './workEmail.ts';
 
-export type { CandidateCard, CandidateSearch, Experience, ProfileDraft, SalaryPreference, TalentProfile, Verification, WorkMode } from './types.ts';
+export type { CandidateCard, CandidateSearch, Experience, Fact, ProfileDraft, SalaryPreference, TalentProfile, Verification, WorkMode } from './types.ts';
 
 let cachedProfiles: Profiles | undefined;
 

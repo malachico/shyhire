@@ -38,7 +38,7 @@ describe('Talent work email', () => {
     assert.equal(profile.version, 1);
     assert.equal(profile.verified[0]!.data.domain, 'secret-employer.test');
     assert.equal(profile.employerDomains.includes('secret-employer.test'), true);
-    assert.equal(profile.publicSummary.includes('Work email verified.'), true);
+    assert.equal(profile.publicSummary.includes('Has a verified work email'), true);
     assert.doesNotMatch(profile.publicSummary, /secret|worker@/i);
     const edited = await profiles.save(person, { version: profile.version, employerDomains: [] });
     assert.equal(edited.employerDomains.includes('secret-employer.test'), true);
