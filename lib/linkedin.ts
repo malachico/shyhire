@@ -116,6 +116,7 @@ export class TalentLinkedIn {
         source: 'linkedin',
         label: 'LinkedIn account',
         verifiedAt: new Date().toISOString(),
+        subject: sub,
         data,
       },
     };

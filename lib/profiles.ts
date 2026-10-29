@@ -480,17 +480,34 @@ export class Profiles {
     }
     return professionalDraft({ ...draft, verified: profile.verified });
   }
-  async verify(personId: string, item: Verification, transaction?: Transaction): Promise<void> {
+  async verify(personId: string, item: Verification, transaction?: Transaction, subject?: string): Promise<void> {
     if (typeof personId !== 'string' || !personId.trim()) throw new TalentError('not_found', 'Candidate not found');
     const id = personId.trim();
+    const rawSub = subject ?? item.subject ?? (typeof item.data?.sub === 'string' || typeof item.data?.sub === 'number' ? String(item.data.sub) : undefined);
+    const sub = typeof rawSub === 'string' ? rawSub.trim() : '';
     const initial = await this.mine(id);
     const write = async (tx: Transaction) => {
-      const ref = this.col.doc(id); const current = normalizeProfile(id, (await tx.get(ref)).data() as Partial<TalentProfile> | undefined ?? initial);
+      const ref = this.col.doc(id);
+      const claimRef = (item.source === 'linkedin' || item.source === 'github') && sub
+        ? this.db.collection('talent_claims').doc(`${item.source}:${sub}`)
+        : undefined;
+      const [profileDoc, claimDoc] = claimRef ? await tx.getAll(ref, claimRef) : [await tx.get(ref), undefined];
+      if (claimDoc?.exists) {
+        const existing = claimDoc.data() as { personId?: string } | undefined;
+        if (existing?.personId && existing.personId !== id) {
+          const providerLabel = item.source === 'linkedin' ? 'LinkedIn' : 'GitHub';
+          throw new TalentError('conflict', `This ${providerLabel} account is already connected to another profile`);
+        }
+      }
+      const current = normalizeProfile(id, (profileDoc.data() as Partial<TalentProfile> | undefined) ?? initial);
       const next: TalentProfile = { ...current, alias: await this.alias(tx, current.alias), verified: [...current.verified.filter((v) => v.id !== item.id), item], version: current.version + 1, updatedAt: new Date().toISOString() };
       next.verified = next.verified.map(professionalVerification);
       Object.assign(next, professionalDraft(next));
       next.employerDomains = [...new Set([...next.employerDomains, ...verifiedDomains(next.verified)])];
       next.publicSummary = publicSummary(next);
+      if (claimRef) {
+        tx.set(claimRef, { personId: id, provider: item.source, subject: sub, updatedAt: next.updatedAt });
+      }
       tx.set(ref, next);
     };
     if (transaction) await write(transaction); else await this.db.runTransaction(write);

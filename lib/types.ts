@@ -14,6 +14,7 @@ export interface Verification {
   source: 'github' | 'linkedin' | 'work-email' | 'stripe' | 'vercel';
   label: string;
   verifiedAt: string;
+  subject?: string;
   data: Record<string, string | number | boolean | string[]>;
 }
 

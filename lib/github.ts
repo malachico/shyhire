@@ -86,6 +86,7 @@ export class TalentGitHub {
         source: 'github',
         label: 'GitHub activity',
         verifiedAt: new Date().toISOString(),
+        subject: String(user.id),
         data: {
           languages,
           publicRepositories: count(repos.totalCount),
