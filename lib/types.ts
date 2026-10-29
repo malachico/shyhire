@@ -89,6 +89,9 @@ export interface CandidateCard {
   facts: Fact[];
   badges: Verification['source'][];
   openTo: string;
+  /** From the AI search: 0-100 fit, and one line on why. */
+  score?: number;
+  why?: string;
 }
 
 export interface CandidateSearch {

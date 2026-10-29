@@ -32,6 +32,8 @@ export interface StoredTalentRoom {
   candidateId: string;
   candidateAlias: string;
   brief?: Partial<TalentRoomBrief>;
+  /** The standing role this conversation was opened for, if any. */
+  roleId?: string;
   status: RoomStatus;
   needsDecision?: TalentRoomDecision;
   documentVersion?: number;
@@ -46,6 +48,7 @@ export interface CompanyRoomSummary {
   companyName: string;
   candidateAlias: string;
   brief: TalentRoomBrief;
+  roleId?: string;
   status: RoomStatus;
   waitingOn?: RoomSideKind;
   needsDecision?: { side: 'company'; question: string; options: string[] };
@@ -112,6 +115,7 @@ export interface TalentRoomDetail {
 
 export interface ParlyRoomsClient {
   createAgent?: (key: string, name: string, instructions: string) => Promise<{ key: string; name: string }>;
+  putAgent?: (key: string, agent: { name: string; instructions: string; card?: string; listed?: boolean }) => Promise<{ key: string; name: string }>;
   openRoom?: (body: { goal: string; sides: [SideInput, SideInput]; metadata?: Record<string, string> }) => Promise<{ id: string; status: RoomStatus }>;
   getRoom: (roomId: string) => Promise<Room>;
   messages: (roomId: string, side: string, after?: string) => Promise<{ messages: RoomMessage[] }>;
@@ -126,6 +130,23 @@ const HIRING_AGENT_INSTRUCTIONS =
   'You represent the hiring company in an anonymous Shyhire conversation. Evaluate mutual role, technical, compensation, and working-mode fit against your private brief without asking for or revealing personal identifiers. Use ASK MY SIDE when you need a decision from the hiring team, and draft/update the shared fit summary once fit is clear.';
 const CANDIDATE_AGENT_INSTRUCTIONS =
   'You represent the candidate in an anonymous Shyhire conversation. Protect candidate anonymity strictly: never reveal names, employers, URLs, or raw private text. Evaluate mutual fit against your private brief, use ASK MY SIDE when a decision is needed from the candidate, and draft/update the shared fit summary once fit is clear.';
+
+/** A candidate's own agent in Parly: one per candidate, named by their alias ("Candidate #1a2b3c4d" → "cand-1a2b3c4d"). */
+export const candidateAgentKey = (alias: string) => `cand-${alias.replace(/^Candidate #/i, '').toLowerCase().slice(0, 30)}`;
+
+/** Everything the candidate's own agent knows: what companies see, then the private parts it never quotes. */
+export function candidateBrief(p: TalentProfile): string {
+  const preferenceLines = formatCandidatePreferencesBrief(p);
+  const roles = p.experience.filter((r) => !r.hidden).slice(0, 15)
+    .map((r) => `- ${r.title}${r.start || r.end ? ` (${r.start || '?'}–${r.end || 'Present'})` : ''}${r.description ? `: ${r.description.slice(0, 300)}` : ''}`);
+  return [
+    p.publicSummary,
+    details(p.details),
+    roles.length ? `Self-reported roles (employer names withheld; never reveal names, employers or contact details):\n${roles.join('\n')}` : '',
+    p.openTo ? `Open to: ${p.openTo}` : '',
+    preferenceLines.length ? `Private candidate preferences (never quote raw text; use to evaluate fit and decide):\n${preferenceLines.join('\n')}` : '',
+  ].filter(Boolean).join('\n\n').slice(0, 6000);
+}
 
 /** CV details as brief lines for the candidate's own agent. */
 function details(d?: CvDetails): string {
@@ -244,6 +265,21 @@ export class TalentRoomViews {
     this.col = this.store.collection('talent_rooms');
   }
 
+  /**
+   * Keeps the candidate's own Parly agent in step with their profile: what companies see is its card, the rest its
+   * private instructions. Listed (found by search) only while they're open to conversations.
+   */
+  async syncCandidate(p: TalentProfile): Promise<boolean> {
+    if (!this.parlyClient.putAgent || !/^Candidate #[a-f0-9]{8,36}$/i.test(p.alias)) return false;
+    await this.parlyClient.putAgent(candidateAgentKey(p.alias), {
+      name: p.alias,
+      instructions: `${CANDIDATE_AGENT_INSTRUCTIONS}\n\nAbout the candidate you represent:\n${candidateBrief(p)}`,
+      card: p.publicSummary.slice(0, 2000),
+      listed: p.searchable === true && !p.paused && p.version > 0,
+    });
+    return true;
+  }
+
   private async ensureAgentTemplates(): Promise<void> {
     if (this.agentsEnsured || !this.parlyClient.createAgent) return;
     await Promise.all([
@@ -345,37 +381,29 @@ export class TalentRoomViews {
       .filter(Boolean)
       .join('\n');
 
-    const preferenceLines = formatCandidatePreferencesBrief(candidateProfile);
-    const roles = candidateProfile.experience.filter((r) => !r.hidden).slice(0, 15)
-      .map((r) => `- ${r.title}${r.start || r.end ? ` (${r.start || '?'}–${r.end || 'Present'})` : ''}${r.description ? `: ${r.description.slice(0, 300)}` : ''}`);
-    const candidateBriefText = [
-      candidateProfile.publicSummary,
-      details(candidateProfile.details),
-      roles.length ? `Self-reported roles (employer names withheld; never reveal names, employers or contact details):\n${roles.join('\n')}` : '',
-      candidateProfile.openTo ? `Open to: ${candidateProfile.openTo}` : '',
-      preferenceLines.length
-        ? `Private candidate preferences (never quote raw text; use to evaluate fit and decide):\n${preferenceLines.join('\n')}`
-        : '',
-    ]
-      .filter(Boolean)
-      .join('\n\n');
+    const candidateBriefText = candidateBrief(candidateProfile);
 
     const goal = `Evaluate fit: ${companyName} (${role}) × ${candidateProfile.alias}`.slice(0, 200);
+    // The candidate's own agent when Parly has it (it carries their brief); else the shared template with the brief.
+    const ownAgent = await this.syncCandidate(candidateProfile).catch((err) => { console.error('candidate agent sync', err); return false; });
     const sides: [SideInput, SideInput] = [
       { ref: 'company', name: companyName.slice(0, 60), brief: companyBriefText.slice(0, 4000), agent: HIRING_AGENT_KEY },
-      { ref: 'candidate', name: candidateProfile.alias.slice(0, 60), brief: candidateBriefText.slice(0, 4000), agent: CANDIDATE_AGENT_KEY },
+      ownAgent
+        ? { ref: 'candidate', name: candidateProfile.alias.slice(0, 60), brief: '', agent: candidateAgentKey(candidateProfile.alias) }
+        : { ref: 'candidate', name: candidateProfile.alias.slice(0, 60), brief: candidateBriefText.slice(0, 4000), agent: CANDIDATE_AGENT_KEY },
     ];
+    const roleId = typeof body.roleId === 'string' && /^[a-f0-9-]{36}$/.test(body.roleId) ? body.roleId : undefined;
 
     try {
       await this.ensureAgentTemplates();
       let opened: { id: string; status: RoomStatus };
       try {
-        opened = await this.parlyClient.openRoom({ goal, sides });
+        opened = await this.parlyClient.openRoom({ goal, sides, ...(roleId ? { metadata: { roleId } } : {}) });
       } catch (err) {
         if (err instanceof ParlyError && err.status === 400 && /No agent/i.test(err.message) && this.parlyClient.createAgent) {
           this.agentsEnsured = false;
           await this.ensureAgentTemplates();
-          opened = await this.parlyClient.openRoom({ goal, sides });
+          opened = await this.parlyClient.openRoom({ goal, sides, ...(roleId ? { metadata: { roleId } } : {}) });
         } else {
           throw err;
         }
@@ -388,6 +416,7 @@ export class TalentRoomViews {
         candidateId: candidateDoc.id,
         candidateAlias: candidateProfile.alias,
         brief: { role, comp, mustHaves },
+        ...(roleId ? { roleId } : {}),
         status,
         createdAt: now,
         updatedAt: now,
@@ -527,6 +556,7 @@ export class TalentRoomViews {
         companyName: typeof data.companyName === 'string' ? data.companyName : '',
         candidateAlias: typeof data.candidateAlias === 'string' ? data.candidateAlias : '',
         brief: normalizeBrief(data.brief),
+        ...(data.roleId ? { roleId: data.roleId } : {}),
         status,
         ...(waitingOn ? { waitingOn } : {}),
         ...(status === 'needs_decision' && decision?.side === 'company'

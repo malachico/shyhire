@@ -406,6 +406,14 @@ export function vertexSummaryWriter(opts: VertexOpts): SummaryWriter {
 export class Profiles {
   importer?: ProfileImporter;
   summarizer?: SummaryWriter;
+  /** After a profile changes (its Parly agent follows it); a failure is logged, never fails the change. */
+  onChange?: (profile: TalentProfile) => Promise<void>;
+  /** Ranks candidates' agents against a role (Parly search); unset or failing: keyword search. */
+  agentSearch?: (query: string, limit: number) => Promise<{ key: string; score: number; why: string }[]>;
+  private async changed(profile: TalentProfile): Promise<TalentProfile> {
+    if (this.onChange) await this.onChange(profile).catch((err) => console.error('profile change hook', err));
+    return profile;
+  }
   private readonly importLimiter = new RateLimiter(5, 60 * 60_000, 'profile imports');
   private readonly db: Firestore;
   constructor(db: Firestore) { this.db = db; }
@@ -545,7 +553,7 @@ export class Profiles {
       if (leaks.length) throw new TalentError('invalid', `What companies see mentions ${leaks.join(', ')}. Remove it, then save.`);
       tx.set(ref, next);
       return next;
-    });
+    }).then((p) => this.changed(p));
   }
   async search(caller: TalentCaller, raw: unknown): Promise<{ profiles: CandidateCard[]; capped: boolean }> {
     const { id } = callerOf(caller);
@@ -553,17 +561,40 @@ export class Profiles {
     const own = await this.mine(id);
     const domains = new Set(verifiedDomains(own.verified));
     if (!domains.size) throw new TalentError('forbidden', 'Verify your work email before searching candidates');
+    const card = (docId: string, profile: TalentProfile, extra: Partial<CandidateCard> = {}): CandidateCard => {
+      const p = normalizeProfile(docId, profile);
+      return { alias: p.alias, publicSummary: factsSummary(p), facts: publicFacts(p), badges: [...new Set(p.verified.map((v) => v.source))], openTo: publicOpenTo(p.openTo), ...extra };
+    };
+    // Who may see whom: never yourself, a paused profile, or someone who blocked your company. Parly doesn't know these.
+    const visible = (docId: string, p: TalentProfile) => docId !== id && p.searchable === true && !p.paused && /^Candidate #[a-f0-9]{8,36}$/i.test(p.alias) && !p.employerDomains.some((domain) => domainBlocked(domain, domains));
+    if (this.agentSearch && query) {
+      try {
+        const matches = await this.agentSearch(query, 40);
+        const aliases = matches.map((m) => `Candidate #${m.key.replace(/^cand-/, '')}`);
+        const byAlias = new Map<string, { id: string; p: TalentProfile }>();
+        for (let i = 0; i < aliases.length; i += 30) {
+          const snap = await this.col.where('alias', 'in', aliases.slice(i, i + 30)).get();
+          for (const d of snap.docs) byAlias.set((d.data() as TalentProfile).alias.toLowerCase(), { id: d.id, p: d.data() as TalentProfile });
+        }
+        const profiles = matches.flatMap((m, i) => {
+          const hit = byAlias.get(aliases[i]!.toLowerCase());
+          return hit && visible(hit.id, hit.p) ? [card(hit.id, hit.p, { score: m.score, why: m.why })] : [];
+        });
+        return { profiles: profiles.slice(0, 20), capped: false };
+      } catch (err) {
+        console.error('agent search failed; keyword search instead', err);
+      }
+    }
     const terms = matchingTerms(query).map((term) => term.toLowerCase());
     if (!terms.length) return { profiles: [], capped: false };
     const found = await this.col.where('searchable', '==', true).limit(201).get();
     const ranked = found.docs.slice(0, 200).flatMap((doc) => {
       const profile = doc.data() as TalentProfile;
-      if (doc.id === id || profile.paused || !/^Candidate #[a-f0-9]{8,36}$/i.test(profile.alias) || profile.employerDomains.some((domain) => domainBlocked(domain, domains))) return [];
-      const summary = factsSummary(normalizeProfile(doc.id, profile));
-      const skills = new Set(matchingTerms(summary).map((term) => term.toLowerCase()));
+      if (!visible(doc.id, profile)) return [];
+      const c = card(doc.id, profile);
+      const skills = new Set(matchingTerms(c.publicSummary).map((term) => term.toLowerCase()));
       const score = terms.filter((term) => skills.has(term)).length;
-      if (!score) return [];
-      return [{ score, card: { alias: profile.alias, publicSummary: summary, facts: publicFacts(normalizeProfile(doc.id, profile)), badges: [...new Set(profile.verified.map((v) => v.source))], openTo: publicOpenTo(profile.openTo) } satisfies CandidateCard }];
+      return score ? [{ score, card: c }] : [];
     });
     ranked.sort((a, b) => b.score - a.score || a.card.alias.localeCompare(b.card.alias));
     return { profiles: ranked.slice(0, 20).map((r) => r.card), capped: found.size > 200 };
@@ -574,7 +605,7 @@ export class Profiles {
     const ref = this.col.doc(id);
     if (!(await ref.get()).exists) throw new TalentError('invalid', 'Save your profile first');
     await ref.set({ paused, updatedAt: new Date().toISOString() }, { merge: true });
-    return this.mine(caller);
+    return this.changed(await this.mine(caller));
   }
   async draft(caller: TalentCaller, raw: unknown): Promise<ProfileDraft> {
     const { id } = callerOf(caller);
@@ -646,6 +677,8 @@ export class Profiles {
           throw err;
         }
       }
+      // ponytail: inside a caller's transaction the agent catches up on the next save or room instead.
+      await this.changed(await this.mine(id));
     }
   }
   async recordContact(

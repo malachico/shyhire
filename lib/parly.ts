@@ -14,6 +14,7 @@ export interface Room {
   pending: { decisionId: string; sideRef: string; question: string; options: string[] }[];
   metadata?: Record<string, string>;
 }
+export interface AgentMatch { key: string; name: string; card: string; score: number; why: string }
 export interface RoomMessage { id: string; channel: 'shared' | 'corner'; from: string; at: string; text: string; post?: string }
 
 export class ParlyError extends Error {
@@ -51,6 +52,12 @@ export const parly = {
   me: () => call<{ id: string; workspaceId: string; name: string; scopes: string[]; agents: string[] }>('/me'),
   /** Saves an agent template (the same key updates it); every room side gets its own private copy. */
   createAgent: (key: string, name: string, instructions: string) => call<{ key: string; name: string }>('/agents', { method: 'POST', body: { key, name, instructions } }),
+  /** One of the app's agents: private instructions, and a public card that search ranks when it is listed. */
+  putAgent: (key: string, agent: { name: string; instructions: string; card?: string; listed?: boolean }) => call<{ key: string; name: string }>(`/agents/${id(key)}`, { method: 'PUT', body: agent }),
+  deleteAgent: (key: string) => call<{ deleted: true }>(`/agents/${id(key)}`, { method: 'DELETE' }),
+  /** The app's listed agents ranked against a free-text query by their cards, best first. */
+  searchAgents: (query: string, opts: { limit?: number; exclude?: string[] } = {}) =>
+    call<{ results: AgentMatch[] }>('/agents/search', { method: 'POST', body: { query, ...opts } }),
   openRoom: (body: { goal: string; sides: [SideInput, SideInput]; metadata?: Record<string, string> }) => call<{ id: string; status: RoomStatus }>('/rooms', { method: 'POST', body }),
   getRoom: (roomId: string) => call<Room>(`/rooms/${id(roomId)}`),
   listRooms: (metadata: Record<string, string> = {}) =>

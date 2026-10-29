@@ -40,6 +40,7 @@ export function CandidateResults({ results, query, existing }: { results: Candid
               ? <a href={`/talent/conversations/${encodeURIComponent(talking.id)}`} className="pill pill-accent">{talking.label} →</a>
               : <button type="button" className="btn-primary min-h-9 text-sm" onClick={() => { setAlias(p.alias); setError(undefined); }}>Talk</button>}
           </div>
+          {p.why && <p className="mt-2 rounded-lg bg-[var(--accent-bg)] px-3 py-2 text-sm"><span className="font-semibold">Why: </span>{p.why}</p>}
           {p.facts?.length
             ? <ul className="mt-2 space-y-1 text-sm leading-relaxed">{p.facts.map((f) => <li key={f.id} className="flex gap-2">
                 <span aria-hidden className={f.source === 'cv' ? 'muted' : 'text-[#12b76a]'}>{f.source === 'cv' ? '•' : '✓'}</span>

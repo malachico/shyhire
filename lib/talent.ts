@@ -1,6 +1,9 @@
 import type { Firestore } from '@google-cloud/firestore';
 import { db, DEFAULT_GCP_PROJECT_ID, gcpAccessToken } from './db.ts';
 import { firestoreLlmMeter, Profiles, vertexProfileImporter, vertexSummaryWriter } from './profiles.ts';
+import { parly } from './parly.ts';
+import { Roles } from './roles.ts';
+import { roomViews } from './roomViews.ts';
 import { noticeMailer, WorkEmailVerification } from './workEmail.ts';
 
 export type { CandidateCard, CandidateSearch, Experience, Fact, ProfileDraft, SalaryPreference, TalentProfile, Verification, WorkMode } from './types.ts';
@@ -38,7 +41,17 @@ export function createProfiles(
   return instance;
 }
 
+let cachedRoles: Roles | undefined;
+export function roles(): Roles {
+  return (cachedRoles ??= new Roles(profiles(), roomViews()));
+}
+
 export function profiles(): Profiles {
+  if (!cachedProfiles && process.env.PARLY_API_KEY) {
+    cachedProfiles = createProfiles();
+    cachedProfiles.onChange = async (p) => { await roomViews().syncCandidate(p); };
+    cachedProfiles.agentSearch = async (query, limit) => (await parly.searchAgents(query, { limit })).results;
+  }
   return (cachedProfiles ??= createProfiles());
 }
 

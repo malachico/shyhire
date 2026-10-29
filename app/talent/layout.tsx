@@ -15,7 +15,7 @@ export default async function TalentLayout({ children }: { children: React.React
   // A dot on Conversations when one is waiting on this person (a question or an approval).
   const waiting = await roomViews().waitingCount(session.sub).catch(() => 0);
   const tabs = mode === 'hire'
-    ? [{ href: '/talent/search', label: 'Find' }, { href: '/talent/conversations', label: 'Conversations' }]
+    ? [{ href: '/talent/search', label: 'Hiring' }, { href: '/talent/conversations', label: 'Conversations' }]
     : [{ href: '/talent/profile', label: 'Profile' }, { href: '/talent/conversations', label: 'Conversations' }];
   const initial = (session.name || session.email || '?').trim().charAt(0).toUpperCase();
   return <div className="min-h-dvh">
