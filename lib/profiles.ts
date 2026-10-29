@@ -224,8 +224,13 @@ function professionalVerification(item: Verification): Verification {
       const count = item.data[key]; if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) data[key] = count;
     }
     data.languages = technologies(Array.isArray(item.data.languages) ? item.data.languages.join(' ') : '');
-  } else if (item.source === 'work-email' && typeof item.data.domain === 'string') data.domain = item.data.domain;
-  return { id: item.source === 'work-email' ? `work-email:${data.domain}` : item.source, source: item.source, label: `${item.source === 'github' ? 'GitHub activity' : item.source === 'linkedin' ? 'LinkedIn account connected' : item.source === 'work-email' ? 'Work email verified' : item.source}`, verifiedAt: item.verifiedAt, data };
+  } else if (item.source === 'work-email' && typeof item.data.domain === 'string') {
+    data.domain = item.data.domain;
+  } else if (item.source === 'linkedin') {
+    if (typeof item.data.name === 'string' && item.data.name.trim()) data.name = item.data.name.trim().slice(0, 120);
+    if (typeof item.data.email === 'string' && item.data.email.trim()) data.email = item.data.email.trim().toLowerCase().slice(0, 254);
+  }
+  return { id: item.source === 'work-email' ? `work-email:${data.domain}` : item.source, source: item.source, label: `${item.source === 'github' ? 'GitHub activity' : item.source === 'linkedin' ? 'LinkedIn account' : item.source === 'work-email' ? 'Work email verified' : item.source}`, verifiedAt: item.verifiedAt, data };
 }
 
 export function publicSummary(profile: Pick<TalentProfile, 'experience' | 'headline' | 'about' | 'verified'>): string {

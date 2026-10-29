@@ -2,9 +2,16 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { describe, it } from 'node:test';
 import { testDb } from '../lib/db.ts';
-import { Composio, TalentLinkedIn, type ToolAccount } from '../lib/linkedin.ts';
+import {
+  LINKEDIN_AUTHORIZE_URL,
+  LINKEDIN_CALLBACK_PATH,
+  LINKEDIN_SCOPES,
+  LINKEDIN_TOKEN_URL,
+  LINKEDIN_USERINFO_URL,
+  TalentLinkedIn,
+} from '../lib/linkedin.ts';
 import { professionalDraft, Profiles } from '../lib/profiles.ts';
-import { createProfiles, profiles as defaultProfiles } from '../lib/talent.ts';
+import { createProfiles } from '../lib/talent.ts';
 
 function testPerson(name = 'Owner') {
   const id = `person-${randomUUID().slice(0, 8)}`;
@@ -82,93 +89,118 @@ describe('Talent professional profile generation', () => {
   });
 });
 
-describe('Talent LinkedIn account connection', () => {
-  function fixture() {
-    const db = testDb(), profiles = new Profiles(db);
-    let nextAccounts: ToolAccount[] | undefined;
-    let nextExecute: { ok: boolean; data?: unknown } | undefined;
-    const accountCalls: string[] = [];
-    const executeCalls: [string, string, Record<string, unknown>, string | undefined][] = [];
-    const connectCalls: [string, string, string][] = [];
-    const composio = {
-      accounts: async (id: string) => {
-        accountCalls.push(id);
-        if (nextAccounts) { const out = nextAccounts; nextAccounts = undefined; return out; }
-        return [{ id: 'candidate-account', toolkit: 'linkedin', status: 'ACTIVE', authConfigId: 'dedicated-config' }];
-      },
-      execute: async (id: string, slug: string, args: Record<string, unknown>, accountId?: string) => {
-        executeCalls.push([id, slug, args, accountId]);
-        if (nextExecute) { const out = nextExecute; nextExecute = undefined; return out; }
-        return { ok: true, data: { response_dict: { sub: 'private-subject', name: 'Private Name', email: 'private@example.test' } } };
-      },
-      connectWithConfig: async (id: string, cfg: string, cb: string) => {
-        connectCalls.push([id, cfg, cb]);
-        return 'https://connect.example.test';
-      },
-    };
-    const linkedin = new TalentLinkedIn(db, profiles, composio, Buffer.alloc(32, 7), 'dedicated-config', 'https://talent.parly.dev');
-    return {
-      db, profiles, composio, linkedin, accountCalls, executeCalls, connectCalls,
-      mockAccountsOnce: (items: ToolAccount[]) => { nextAccounts = items; },
-      mockExecuteOnce: (res: { ok: boolean; data?: unknown }) => { nextExecute = res; },
-    };
-  }
-
-  it('uses a dedicated auth config, fixed callback and owner/account-bound self-profile call', async () => {
-    const { db, profiles, linkedin, accountCalls, executeCalls, connectCalls } = fixture();
+describe('Talent LinkedIn OpenID Connect account connection', () => {
+  it('builds the OIDC authorize URL, exchanges code for userinfo, records a LinkedIn account verification (name and email), and keeps name/email out of publicSummary and search', async () => {
+    const db = testDb();
+    const profiles = new Profiles(db);
     const person = testPerson();
-    await linkedin.connect(person, 'a'.repeat(48));
-    assert.deepEqual(connectCalls[0], [person.id, 'dedicated-config', `https://talent.parly.dev/talent/auth/linkedin/callback?state=${'a'.repeat(48)}`]);
-    await linkedin.verify(person);
-    assert.equal(accountCalls.includes(person.id), true);
-    assert.deepEqual(executeCalls[0], [person.id, 'LINKEDIN_GET_MY_INFO', {}, 'candidate-account']);
-    const profile = await profiles.mine(person);
-    assert.deepEqual(profile.verified[0]!.data, {});
-    assert.doesNotMatch(JSON.stringify(profile), /private-subject|Private Name|private@/);
-    const identities = await db.collection('talent_linkedin_identities').get();
-    assert.match(identities.docs[0]!.id, /^[a-f0-9]{64}$/);
-    assert.deepEqual(identities.docs[0]!.data(), { personId: person.id });
-  });
-
-  it('atomically rejects another profile claiming the same provider subject', async () => {
-    const { db, linkedin } = fixture();
-    const one = testPerson(), two = testPerson();
-    const results = await Promise.allSettled([linkedin.verify(one), linkedin.verify(two)]);
-    assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
-    assert.equal((await db.collection('talent_linkedin_identities').get()).size, 1);
-    assert.equal((await db.collection('profiles').get()).size, 1);
-  });
-
-  it('fails closed for bots, unrelated configs, inactive accounts and malformed responses', async () => {
-    const { profiles, linkedin, mockAccountsOnce, mockExecuteOnce } = fixture();
-    const person = testPerson(), bot = { id: 'bot-1', kind: 'bot' };
-    await assert.rejects(linkedin.verify(bot), /People/);
-    await assert.rejects(linkedin.connect(person, 'bad'), /state/);
-    mockAccountsOnce([{ id: 'wrong', toolkit: 'linkedin', status: 'ACTIVE', authConfigId: 'broad-social-config' }]);
-    await assert.rejects(linkedin.verify(person), /Connect/);
-    mockAccountsOnce([{ id: 'old', toolkit: 'linkedin', status: 'EXPIRED', authConfigId: 'dedicated-config' }]);
-    await assert.rejects(linkedin.verify(person), /Connect/);
-    mockExecuteOnce({ ok: true, data: { response_dict: { sub: '', name: 'Private Name', email: '' } } });
-    await assert.rejects(linkedin.verify(person), /confirm/);
-    assert.deepEqual((await profiles.mine(person)).verified, []);
-  });
-
-  it('forwards the explicit config/account without changing generic Composio calls', async () => {
     const calls: [string, RequestInit | undefined][] = [];
     const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
       calls.push([String(url), init]);
-      return new Response(JSON.stringify(
-        String(url).includes('connected_accounts/link') ? { redirect_url: 'https://connect.example.test' }
-        : String(url).includes('connected_accounts?') ? { items: [{ id: 'candidate-account', toolkit: { slug: 'linkedin' }, status: 'ACTIVE', auth_config: { id: 'dedicated-config' } }] }
-        : { successful: true, data: { response_dict: { sub: 'subject' } } },
-      ));
+      if (String(url) === LINKEDIN_TOKEN_URL) {
+        return new Response(JSON.stringify({ access_token: 'SECRET_LINKEDIN_TOKEN', id_token: 'jwt' }));
+      }
+      if (String(url) === LINKEDIN_USERINFO_URL) {
+        assert.equal((init?.headers as Record<string, string>)?.authorization, 'Bearer SECRET_LINKEDIN_TOKEN');
+        return new Response(
+          JSON.stringify({
+            sub: 'linkedin-sub-782bbtaQ',
+            name: 'Jane Candidate',
+            email: 'Jane.Candidate@Example.test',
+            email_verified: true,
+          }),
+        );
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`);
     };
-    const composio = new Composio('key', fetcher as typeof fetch);
-    await composio.connectWithConfig('owner', 'dedicated-config', 'https://talent.parly.dev/callback');
-    assert.equal(JSON.parse(String(calls[0]![1]!.body)).auth_config_id, 'dedicated-config');
-    assert.equal((await composio.accounts('owner'))[0]!.authConfigId, 'dedicated-config');
-    await composio.execute('owner', 'LINKEDIN_GET_MY_INFO', {}, 'candidate-account');
-    assert.deepEqual(JSON.parse(String(calls[2]![1]!.body)), { user_id: 'owner', arguments: {}, connected_account_id: 'candidate-account' });
+    const linkedin = new TalentLinkedIn(
+      { clientId: 'li-client-id', clientSecret: 'li-client-secret', webUrl: 'https://talent.parly.dev/' },
+      fetcher as typeof fetch,
+    );
+    const authUrl = new URL(linkedin.authorizeUrl('state-token-123'));
+    assert.equal(`${authUrl.origin}${authUrl.pathname}`, LINKEDIN_AUTHORIZE_URL);
+    assert.equal(authUrl.searchParams.get('response_type'), 'code');
+    assert.equal(authUrl.searchParams.get('client_id'), 'li-client-id');
+    assert.equal(authUrl.searchParams.get('redirect_uri'), `https://talent.parly.dev${LINKEDIN_CALLBACK_PATH}`);
+    assert.equal(authUrl.searchParams.get('state'), 'state-token-123');
+    assert.equal(authUrl.searchParams.get('scope'), LINKEDIN_SCOPES);
+
+    const account = await linkedin.exchange('valid-auth-code');
+    const tokenParams = new URLSearchParams(String(calls[0]![1]?.body));
+    assert.equal(tokenParams.get('grant_type'), 'authorization_code');
+    assert.equal(tokenParams.get('code'), 'valid-auth-code');
+    assert.equal(tokenParams.get('client_id'), 'li-client-id');
+    assert.equal(tokenParams.get('client_secret'), 'li-client-secret');
+    assert.equal(tokenParams.get('redirect_uri'), `https://talent.parly.dev${LINKEDIN_CALLBACK_PATH}`);
+
+    assert.equal(account.sub, 'linkedin-sub-782bbtaQ');
+    assert.equal(account.name, 'Jane Candidate');
+    assert.equal(account.email, 'jane.candidate@example.test');
+    assert.equal(account.verification.source, 'linkedin');
+    assert.equal(account.verification.label, 'LinkedIn account');
+    assert.deepEqual(account.verification.data, {
+      name: 'Jane Candidate',
+      email: 'jane.candidate@example.test',
+    });
+    assert.doesNotMatch(JSON.stringify(account), /SECRET_LINKEDIN_TOKEN/);
+
+    await profiles.save(person, {
+      version: 0,
+      headline: 'Senior Backend Engineer',
+      about: 'Go and PostgreSQL',
+      experience: [{ title: 'Backend Engineer', company: 'Acme', start: '2021-01', end: '2024-01', description: 'Go and PostgreSQL', hidden: false }],
+    });
+    await profiles.verify(person.id, account.verification);
+    const mine = await profiles.mine(person);
+    const liVer = mine.verified.find((v) => v.source === 'linkedin');
+    assert.ok(liVer);
+    assert.equal(liVer.label, 'LinkedIn account');
+    assert.deepEqual(liVer.data, { name: 'Jane Candidate', email: 'jane.candidate@example.test' });
+    assert.match(mine.publicSummary, /LinkedIn account verified\./);
+    assert.doesNotMatch(mine.publicSummary, /Jane Candidate|jane\.candidate|example\.test|linkedin-sub/);
+
+    const searcher = testPerson('Recruiter');
+    await profiles.verify(searcher.id, {
+      id: 'work-email:hiring-co.test',
+      source: 'work-email',
+      label: 'Work email verified',
+      verifiedAt: new Date().toISOString(),
+      data: { domain: 'hiring-co.test' },
+    });
+    const search = await profiles.search(searcher, 'Go');
+    assert.equal(search.profiles.length, 1);
+    assert.equal(search.profiles[0]!.badges.includes('linkedin'), true);
+    assert.doesNotMatch(JSON.stringify(search), /Jane Candidate|jane\.candidate|example\.test|linkedin-sub/);
+  });
+
+  it('fails closed on invalid codes, token exchange errors, missing sub, or unverified email', async () => {
+    const badToken = new TalentLinkedIn(
+      { clientId: 'id', clientSecret: 'secret', webUrl: 'https://talent.parly.dev' },
+      (async () => new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 })) as typeof fetch,
+    );
+    await assert.rejects(badToken.exchange(''), /Invalid LinkedIn/);
+    await assert.rejects(badToken.exchange('code'), /LinkedIn connection failed/);
+
+    const missingSub = new TalentLinkedIn(
+      { clientId: 'id', clientSecret: 'secret', webUrl: 'https://talent.parly.dev' },
+      (async (url: string | URL | Request) =>
+        String(url) === LINKEDIN_TOKEN_URL
+          ? new Response(JSON.stringify({ access_token: 'tok' }))
+          : new Response(JSON.stringify({ sub: '', name: 'Test' }))) as typeof fetch,
+    );
+    await assert.rejects(missingSub.exchange('code'), /invalid identity/);
+
+    const unverifiedEmail = new TalentLinkedIn(
+      { clientId: 'id', clientSecret: 'secret', webUrl: 'https://talent.parly.dev' },
+      (async (url: string | URL | Request) =>
+        String(url) === LINKEDIN_TOKEN_URL
+          ? new Response(JSON.stringify({ access_token: 'tok' }))
+          : new Response(JSON.stringify({ sub: 'li-sub-1', given_name: 'Alex', family_name: 'Dev', email: 'unverified@example.test', email_verified: false }))) as typeof fetch,
+    );
+    const identity = await unverifiedEmail.exchange('code');
+    assert.equal(identity.name, 'Alex Dev');
+    assert.equal(identity.email, undefined);
+    assert.deepEqual(identity.verification.data, { name: 'Alex Dev' });
   });
 });
 

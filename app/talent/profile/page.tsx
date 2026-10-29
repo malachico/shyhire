@@ -1,6 +1,7 @@
 import { currentSession } from '@/lib/auth';
 import { githubConfigured } from '@/lib/github';
-import { profileImportConfigured, profiles, talentLinkedIn, workEmailConfigured } from '@/lib/talent';
+import { linkedinConfigured } from '@/lib/linkedin';
+import { profileImportConfigured, profiles, workEmailConfigured } from '@/lib/talent';
 import { TalentProfileEditor } from '@/components/TalentProfileEditor';
 
 export const dynamic = 'force-dynamic';
@@ -22,11 +23,12 @@ export default async function CandidateProfile({ searchParams }: { searchParams:
       initial={profile}
       error={error}
       githubAvailable={githubConfigured()}
-      linkedinAvailable={Boolean(talentLinkedIn())}
+      linkedinAvailable={linkedinConfigured()}
       workEmailAvailable={workEmailConfigured()}
       importAvailable={profileImportConfigured()}
     />
   );
 }
+
 
 

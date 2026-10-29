@@ -3,24 +3,42 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { currentSession } from '@/lib/auth';
 import { appUrl } from '@/lib/github';
-import { talentLinkedIn } from '@/lib/talent';
+import { LINKEDIN_FLOW_COOKIE, linkedinAccount, linkedinConfigured } from '@/lib/linkedin';
+import { TalentError } from '@/lib/profiles';
+import { profiles } from '@/lib/talent';
+
+const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 export async function GET(request: Request) {
   const base = appUrl();
-  const destination = new URL('/talent/profile', base), jar = await cookies();
-  const raw = jar.get('talent_linkedin')?.value;
-  jar.set('talent_linkedin', '', { httpOnly: true, sameSite: 'lax', secure: base.startsWith('https:'), path: '/talent/auth/linkedin', maxAge: 0 });
-  try {
-    const session = await currentSession();
-    const linkedin = talentLinkedIn();
-    const flow = JSON.parse(raw ?? 'null') as { state: string; personId: string } | null;
-    const state = new URL(request.url).searchParams.get('state') ?? '';
-    if (!session || !linkedin || !flow || typeof flow.state !== 'string' || flow.state.length !== state.length || !timingSafeEqual(Buffer.from(flow.state), Buffer.from(state)) || flow.personId !== session.sub) {
-      throw new Error('Invalid state');
-    }
-    await linkedin.verify(session.sub);
-  } catch {
-    destination.searchParams.set('error', 'LinkedIn could not confirm this connection. Try reconnecting, or create your profile without it.');
+  const jar = await cookies();
+  const raw = jar.get(LINKEDIN_FLOW_COOKIE)?.value;
+  jar.set(LINKEDIN_FLOW_COOKIE, '', {
+    httpOnly: true,
+    secure: base.startsWith('https:'),
+    sameSite: 'lax',
+    path: '/talent/auth/linkedin',
+    maxAge: 0,
+  });
+  const session = await currentSession();
+  if (!session) return NextResponse.redirect(new URL('/talent/profile', base));
+  if (!linkedinConfigured()) {
+    return NextResponse.redirect(`${base}/talent/profile?error=${encodeURIComponent('LinkedIn connection is not configured.')}`);
   }
-  return NextResponse.redirect(destination);
+  const params = new URL(request.url).searchParams;
+  const code = params.get('code') ?? '';
+  const state = params.get('state') ?? '';
+  try {
+    const flow = JSON.parse(raw ?? 'null') as { state?: string; personId?: string } | null;
+    if (!flow?.state || !code || !same(flow.state, state) || flow.personId !== session.sub) {
+      throw new Error('Invalid LinkedIn connection state');
+    }
+    const account = await linkedinAccount(code);
+    await profiles().verify(session.sub, account.verification);
+    return NextResponse.redirect(`${base}/talent/profile`);
+  } catch (error) {
+    const msg = error instanceof TalentError ? error.message : 'LinkedIn connection failed. Please try again.';
+    return NextResponse.redirect(`${base}/talent/profile?error=${encodeURIComponent(msg)}`);
+  }
 }
+
