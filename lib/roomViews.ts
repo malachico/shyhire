@@ -50,7 +50,23 @@ export interface CompanyRoomSummary {
   waitingOn?: RoomSideKind;
   needsDecision?: { side: 'company'; question: string; options: string[] };
   documentVersion?: number;
+  /** This person approved the current summary version. */
+  iApproved: boolean;
   createdAt: string;
+  updatedAt: string;
+}
+
+/** One row of the Conversations list, from either side. */
+export interface ConversationRow {
+  id: string;
+  side: RoomSideKind;
+  /** The other side as this person may see it: a candidate's alias, or the company's name. */
+  title: string;
+  role?: string;
+  status: RoomStatus;
+  needsMe: boolean;
+  documentVersion?: number;
+  iApproved: boolean;
   updatedAt: string;
 }
 
@@ -62,6 +78,8 @@ export interface CandidateRequestSummary {
   waitingOn?: RoomSideKind;
   needsDecision?: { side: 'candidate'; question: string; options: string[] };
   documentVersion?: number;
+  /** This person approved the current summary version. */
+  iApproved: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -99,6 +117,7 @@ export interface ParlyRoomsClient {
   messages: (roomId: string, side: string, after?: string) => Promise<{ messages: RoomMessage[] }>;
   decide: (roomId: string, decisionId: string, choice: string) => Promise<{ ok: true }>;
   approve: (roomId: string, side: string, version: number) => Promise<{ ok: true; agreed: boolean }>;
+  close?: (roomId: string) => Promise<{ ok: true }>;
 }
 
 const HIRING_AGENT_KEY = 'hiring-rep';
@@ -292,7 +311,7 @@ export class TalentRoomViews {
     const companyName = companyDomains[0]!;
 
     const candidateSnap = await this.store.collection('profiles').where('alias', '==', candidateAlias).limit(5).get();
-    const candidateDoc = candidateSnap.docs.find((d) => (d.data() as TalentProfile).searchable === true);
+    const candidateDoc = candidateSnap.docs.find((d) => (d.data() as TalentProfile).searchable === true && !(d.data() as TalentProfile).paused);
     if (!candidateDoc || candidateDoc.id === companyId) {
       throw new TalentError('not_found', 'Candidate not found');
     }
@@ -464,6 +483,21 @@ export class TalentRoomViews {
   }
 
   /** C: Company rooms list (`companyId == me` ordered by `updatedAt desc`). Never exposes `candidateId` or candidate-side decision details. */
+  /** Both sides' rooms in one list (the person may hire and look for work): waiting on them first, then newest. */
+  async listConversations(caller: TalentCaller): Promise<ConversationRow[]> {
+    const [hiring, offers] = await Promise.all([this.listCompanyRooms(caller), this.listCandidateRequests(caller)]);
+    const rows: ConversationRow[] = [
+      ...hiring.map((r) => ({ id: r.id, side: 'company' as const, title: r.candidateAlias, role: r.brief.role, status: r.status, needsMe: !!r.needsDecision, documentVersion: r.documentVersion, iApproved: r.iApproved, updatedAt: r.updatedAt })),
+      ...offers.map((r) => ({ id: r.id, side: 'candidate' as const, title: r.companyName, status: r.status, needsMe: !!r.needsDecision, documentVersion: r.documentVersion, iApproved: r.iApproved, updatedAt: r.updatedAt })),
+    ];
+    return rows.sort((a, b) => Number(b.needsMe) - Number(a.needsMe) || b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  /** How many conversations are waiting on this person's answer (the nav's dot). */
+  async waitingCount(caller: TalentCaller): Promise<number> {
+    return (await this.listConversations(caller)).filter((r) => r.needsMe).length;
+  }
+
   async listCompanyRooms(caller: TalentCaller): Promise<CompanyRoomSummary[]> {
     const { id: personId } = callerOf(caller, 'Sign in as a person to view rooms');
     const snap = await this.col.where('companyId', '==', personId).orderBy('updatedAt', 'desc').limit(100).get();
@@ -483,6 +517,7 @@ export class TalentRoomViews {
           ? { needsDecision: { side: 'company' as const, question: decision.question, options: decision.options } }
           : {}),
         ...(typeof data.documentVersion === 'number' ? { documentVersion: data.documentVersion } : {}),
+        iApproved: typeof data.documentVersion === 'number' && (data as { approved?: Record<string, number> }).approved?.company === data.documentVersion,
         createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
         updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : '',
       };
@@ -508,6 +543,7 @@ export class TalentRoomViews {
           ? { needsDecision: { side: 'candidate' as const, question: decision.question, options: decision.options } }
           : {}),
         ...(typeof data.documentVersion === 'number' ? { documentVersion: data.documentVersion } : {}),
+        iApproved: typeof data.documentVersion === 'number' && (data as { approved?: Record<string, number> }).approved?.candidate === data.documentVersion,
         createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
         updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : '',
       };
@@ -621,11 +657,26 @@ export class TalentRoomViews {
         {
           ...(res.agreed ? { status: 'agreed', needsDecision: FieldValue.delete() } : {}),
           documentVersion: rawVersion,
+          // Which summary version each side approved, so lists can say "Waiting for them".
+          approved: { [viewerSide]: rawVersion },
           updatedAt: new Date().toISOString(),
         },
         { merge: true },
       );
       return { ok: true, agreed: Boolean(res.agreed) };
+    } catch (err) {
+      rethrowParlyError(err);
+    }
+  }
+
+  /** Either side passes: the room ends for both (no contact details are shared). */
+  async pass(caller: TalentCaller, roomId: string): Promise<{ ok: true }> {
+    const { id } = await this.loadForViewer(caller, roomId);
+    if (!this.parlyClient.close) throw new TalentError('unavailable', 'Ending a conversation is not available');
+    try {
+      await this.parlyClient.close(id);
+      await this.col.doc(id).set({ status: 'closed', needsDecision: FieldValue.delete(), updatedAt: new Date().toISOString() }, { merge: true });
+      return { ok: true };
     } catch (err) {
       rethrowParlyError(err);
     }

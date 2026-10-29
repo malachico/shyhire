@@ -5,6 +5,7 @@ import { startSession } from '@/lib/auth';
 import { appUrl } from '@/lib/github';
 import { GOOGLE_FLOW_COOKIE, googleAccount, googleConfigured } from '@/lib/google';
 import { TalentError } from '@/lib/profiles';
+import { homeOf, parseMode, setMode } from '@/lib/mode';
 
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
   const code = params.get('code') ?? '';
   const state = params.get('state') ?? '';
   try {
-    const flow = JSON.parse(raw ?? 'null') as { state?: string; verifier?: string } | null;
+    const flow = JSON.parse(raw ?? 'null') as { state?: string; verifier?: string; mode?: string } | null;
     if (!flow?.state || !flow.verifier || !code || !same(flow.state, state)) {
       throw new Error('Invalid sign-in state');
     }
@@ -33,7 +34,9 @@ export async function GET(request: Request) {
       email: account.email,
       ...(account.name ? { name: account.name } : {}),
     });
-    return NextResponse.redirect(`${appUrl()}/talent/profile`);
+    const mode = parseMode(flow.mode);
+    await setMode(mode);
+    return NextResponse.redirect(`${appUrl()}${homeOf(mode)}`);
   } catch (error) {
     const msg = error instanceof TalentError ? error.message : 'Google sign-in failed. Please try again.';
     return NextResponse.redirect(`${appUrl()}/?error=${encodeURIComponent(msg)}`);

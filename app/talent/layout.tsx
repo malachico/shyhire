@@ -1,21 +1,41 @@
 import type { Metadata } from 'next';
+import { NavTabs } from '@/components/NavTabs';
 import { currentSession } from '@/lib/auth';
+import { switchMode } from '@/lib/actions/talent';
+import { currentMode } from '@/lib/mode';
+import { roomViews } from '@/lib/roomViews';
 
-export const metadata: Metadata = { title: 'Parly Talent', description: 'Let your work introduce you.', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Hireroom', description: 'Let your work introduce you.', robots: { index: false, follow: false } };
 
 export default async function TalentLayout({ children }: { children: React.ReactNode }) {
   const session = await currentSession();
-  return <div className="min-h-dvh bg-[var(--bg)] text-[var(--fg)]">
-    <header className="border-b border-[var(--border)]"><nav aria-label="Talent" className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-8">
-      <a href="/talent/profile" className="text-lg font-semibold tracking-tight">Parly <span className="font-normal text-[var(--muted)]">Talent</span></a>
-      <div className="flex flex-wrap items-center gap-4 text-sm">
-        <a href="/talent/search">Find candidates</a>
-        <a href="/talent/rooms">Company rooms</a>
-        <a href="/talent/requests">Requests</a>
-        <a href="/talent/profile">Your profile</a>
-        {session && <form action="/talent/auth/signout" method="post"><button className="btn">Sign out</button></form>}
-      </div>
-    </nav></header>
+  if (!session) return <div className="min-h-dvh">{children}</div>;
+  const mode = await currentMode();
+  // A dot on Conversations when one is waiting on this person (a question or an approval).
+  const waiting = await roomViews().waitingCount(session.sub).catch(() => 0);
+  const tabs = mode === 'hire'
+    ? [{ href: '/talent/search', label: 'Find' }, { href: '/talent/conversations', label: 'Conversations' }]
+    : [{ href: '/talent/profile', label: 'Profile' }, { href: '/talent/conversations', label: 'Conversations' }];
+  const initial = (session.name || session.email || '?').trim().charAt(0).toUpperCase();
+  return <div className="min-h-dvh">
+    <header className="border-b border-[var(--border)] bg-[var(--surface)]">
+      <nav aria-label="Main" className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-4 px-4">
+        <a href={tabs[0]!.href} className="text-sm font-semibold tracking-tight">Hireroom</a>
+        <NavTabs tabs={tabs} dot={waiting ? '/talent/conversations' : undefined} />
+        <details className="relative">
+          <summary aria-label="Account menu" className="flex size-8 cursor-pointer list-none items-center justify-center rounded-full border border-[var(--border)] text-sm font-medium">{initial}</summary>
+          <div className="card absolute right-0 z-10 mt-2 w-60 space-y-1 p-2 text-sm">
+            <p className="muted truncate px-2 py-1 text-xs">{session.email}</p>
+            <form action={switchMode.bind(null, mode === 'hire' ? 'work' : 'hire')}>
+              <button className="w-full rounded-lg px-2 py-2 text-left hover:bg-[var(--bg)]">{mode === 'hire' ? 'Switch to looking for work' : 'Switch to hiring'}</button>
+            </form>
+            <form action="/talent/auth/signout" method="post">
+              <button className="w-full rounded-lg px-2 py-2 text-left hover:bg-[var(--bg)]">Sign out</button>
+            </form>
+          </div>
+        </details>
+      </nav>
+    </header>
     {children}
   </div>;
 }

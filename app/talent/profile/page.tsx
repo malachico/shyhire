@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { currentSession } from '@/lib/auth';
 import { githubConfigured } from '@/lib/github';
 import { linkedinConfigured } from '@/lib/linkedin';
@@ -6,29 +7,17 @@ import { TalentProfileEditor } from '@/components/TalentProfileEditor';
 
 export const dynamic = 'force-dynamic';
 
-export default async function CandidateProfile({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
+export default async function Profile({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const session = await currentSession();
-  if (!session) {
-    return <main className="mx-auto max-w-lg px-6 py-20">
-      <h1 className="text-3xl font-semibold tracking-tight">Your next chapter starts with your work.</h1>
-      <p className="my-6 text-[var(--muted)]">Sign in with Google to build your candidate profile. Afterwards you can optionally connect GitHub, upload a CV, or connect LinkedIn.</p>
-      {error && <p role="alert" className="mb-4 text-[var(--bad-fg)]">{error}</p>}
-      <a className="btn-primary" href="/talent/auth/google/start">Continue with Google</a>
-    </main>;
-  }
-  const profile = await profiles().mine(session.sub);
-  return (
-    <TalentProfileEditor
-      initial={profile}
-      error={error}
-      githubAvailable={githubConfigured()}
-      linkedinAvailable={linkedinConfigured()}
-      workEmailAvailable={workEmailConfigured()}
-      importAvailable={profileImportConfigured()}
-    />
-  );
+  if (!session) redirect('/');
+  const { error } = await searchParams;
+  return <TalentProfileEditor
+    initial={await profiles().mine(session.sub)}
+    me={{ name: session.name ?? '', email: session.email ?? '' }}
+    error={error}
+    githubAvailable={githubConfigured()}
+    linkedinAvailable={linkedinConfigured()}
+    workEmailAvailable={workEmailConfigured()}
+    importAvailable={profileImportConfigured()}
+  />;
 }
-
-
-
