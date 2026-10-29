@@ -99,7 +99,7 @@ export function TalentProfileEditor({ initial, me, error: initialError, githubAv
     {importAvailable ? <>
       {!pasting ? <label className="card block cursor-pointer text-center hover:border-[var(--accent)]">
         <span className="font-semibold">{file ? file.name : 'Upload your CV or LinkedIn PDF'}</span>
-        <span className="hint block">From LinkedIn: open your profile → More → Save to PDF.</span>
+        <span className="hint block">From LinkedIn: open your profile → More → Save to PDF. On a phone, switch Chrome to “Desktop site” first.</span>
         <input type="file" accept="application/pdf" className="sr-only" aria-label="CV or LinkedIn PDF" disabled={busy} onChange={(e) => setFile(e.target.files?.[0])} />
       </label> : <label className="field">Paste your CV or LinkedIn text<textarea className="input min-h-40" maxLength={40000} disabled={busy} value={source} onChange={(e) => setSource(e.target.value)} /></label>}
       <p className="hint">We read it once to fill in your profile and don&apos;t keep the file.</p>
