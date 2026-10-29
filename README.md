@@ -39,5 +39,6 @@ npm run build
 
 - `lib/db.ts`: Firestore in Talent's own GCP project (`parly-talent-0a7c87`). On Vercel production it authenticates via Vercel OIDC + GCP Workload Identity Federation (`@vercel/oidc` + `ExternalAccountClient`); locally and in tests it uses `FIRESTORE_EMULATOR_HOST`.
 - `lib/profiles.ts`: candidate profiles, professional-only normalization (`professionalDraft`, `publicSummary`), transient CV/PDF draft extraction, and anonymous candidate search (`search`).
+- `lib/roomViews.ts`: company rooms (`/talent/rooms`, `/talent/rooms/[id]`) and candidate requests (`/talent/requests`, `/talent/requests/[id]`), deriving the viewer's side (`company` or `candidate`) server-side from `talent_rooms/{parlyRoomId}` before loading live room messages/documents or calling `parly.decide` and `parly.approve`.
 - `lib/github.ts`, `lib/workEmail.ts`, `lib/linkedin.ts`: GitHub public activity extraction, private one-time code work-email verification, and LinkedIn account connection via Composio.
 
