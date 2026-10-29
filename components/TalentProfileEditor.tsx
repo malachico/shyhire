@@ -12,6 +12,8 @@ const WORK_MODES: { mode: WorkMode; label: string }[] = [
   { mode: 'onsite', label: 'Onsite' },
 ];
 const SOURCE: Record<Fact['source'], string> = { cv: 'CV', github: 'GitHub', linkedin: 'LinkedIn', 'work-email': 'Work email', stripe: 'Stripe', vercel: 'Vercel' };
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const when = (d: string) => { const m = /^(\d{4})-(\d{2})$/.exec(d); return m ? `${MONTHS[Number(m[2]) - 1] ?? ''} ${m[1]}`.trim() : d; };
 const list = (s: string) => s.split(',').map((v) => v.trim()).filter(Boolean);
 
 type Props = {
@@ -44,6 +46,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError ?? '');
   const [notice, setNotice] = useState('');
+  const [editing, setEditing] = useState<'' | 'facts' | 'experience' | 'import' | 'prefs'>('');
   const onboarded = saved.version > 0;
   const change = (f: Partial<TalentProfile>) => { setProfile((p) => ({ ...p, ...f })); setNotice(''); };
   const role = (id: string, f: Partial<Experience>) => change({ experience: profile.experience.map((r) => (r.id === id ? { ...r, ...f } : r)) });
@@ -63,7 +66,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       setProfile(r.profile); setSaved(r.profile);
       setDomains(r.profile.employerDomains.join(', ')); setLocationsText(r.profile.locations.join(', '));
       setSalaryMin(r.profile.salary.min !== undefined ? String(r.profile.salary.min) : ''); setCurrency(r.profile.salary.currency);
-      setNotice('Saved.');
+      setNotice('Saved.'); setEditing('');
       return true;
     } catch { setError('Could not save. Your edits are still here; try again.'); return false; }
     finally { setBusy(false); }
@@ -77,7 +80,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       const res = await fetch('/api/talent/draft', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pdf ? { pdf } : source.trim() ? { text: source } : {}) });
       const r = await res.json() as { draft?: ProfileDraft; error?: string };
       if (r.error) setError(r.error);
-      else if (r.draft) { change(r.draft); setStep(2); }
+      else if (r.draft) { change(r.draft); setStep(2); setEditing('facts'); }
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not read it. Nothing was changed.'); }
     finally { setBusy(false); }
   }
@@ -145,7 +148,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   </fieldset>;
 
   const preferenceFields = <fieldset disabled={busy} className="space-y-4">
-    <p className="muted text-sm">Private. Only your agent sees this, to say no for you.</p>
+    {!onboarded && <p className="muted text-sm">Private. Only your agent sees this, to say no for you.</p>}
     <div className="grid grid-cols-[1fr_7rem] gap-3">
       <label className="field">Minimum salary (yearly)<input className="input" type="number" min={1} max={10000000} step={1000} value={salaryMin} onChange={(e) => { setSalaryMin(e.target.value); setNotice(''); }} placeholder="180000" /></label>
       <label className="field">Currency<select className="input" value={currency} onChange={(e) => { setCurrency(e.target.value); setNotice(''); }}>{CURRENCIES.map((c) => <option key={c}>{c}</option>)}</select></label>
@@ -158,31 +161,51 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
     <label className="field">No-gos<textarea className="input min-h-20" maxLength={1000} value={profile.noGos ?? ''} onChange={(e) => change({ noGos: e.target.value })} placeholder="No gambling, on-call at most a week a month" /></label>
   </fieldset>;
 
-  const preview = <section aria-label="What companies see" className="rounded-[18px] bg-[var(--ink)] p-[18px] text-[var(--bg)]">
-    <p className="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--sun)]"><Mark size={30} flower={false} look="ahead" body="#3a3a3a" />What companies see</p>
-    <p className="mt-2 text-[17px] font-semibold">{saved.alias || 'Candidate #…'}</p>
-    <ul className="mt-2 space-y-2 text-sm leading-relaxed text-[#DDD6CA]">
-      {verifiedFacts.map((f) => {
-        const hidden = profile.hiddenFacts.includes(f.id);
-        return <li key={f.id} className={`flex items-start gap-2 ${hidden ? 'opacity-40 line-through' : ''}`}>
-          <span aria-hidden className="text-[var(--sun)]">✓</span>
-          <span className="flex-1">{f.text} <span className="text-xs text-[#A8A196]">· {SOURCE[f.source]}</span></span>
-          <button type="button" className="text-xs text-[#A8A196] underline" disabled={busy} onClick={() => change({ hiddenFacts: hidden ? profile.hiddenFacts.filter((id) => id !== f.id) : [...profile.hiddenFacts, f.id] })}>{hidden ? 'Show' : 'Hide'}</button>
-        </li>;
-      })}
-      {profile.facts.map((f) => <li key={f.id} className="flex items-start gap-2">
-        <span aria-hidden>•</span>
-        <textarea aria-label="Fact" rows={1} className="field-sizing-content flex-1 resize-none rounded border border-[#3a3a3a] bg-transparent px-1.5 py-0.5 text-[#DDD6CA]" maxLength={300} disabled={busy} value={f.text} onChange={(e) => change({ facts: profile.facts.map((x) => (x.id === f.id ? { ...x, text: e.target.value } : x)) })} />
-        <button type="button" aria-label="Remove fact" className="text-xs text-[#A8A196] underline" disabled={busy} onClick={() => change({ facts: profile.facts.filter((x) => x.id !== f.id) })}>Remove</button>
-      </li>)}
-    </ul>
-    {!verifiedFacts.length && !profile.facts.length && <p className="mt-2 text-sm text-[#8a847a]">No facts yet. Let the AI write them from your CV, or add your own.</p>}
-    {profile.facts.length < 10 && <button type="button" className="mt-2 text-xs text-[#DDD6CA] underline" disabled={busy} onClick={() => change({ facts: [...profile.facts, { id: crypto.randomUUID(), text: '', source: 'cv' }] })}>+ Add a fact</button>}
-    {!!leaks.length && <p role="alert" className="mt-2 rounded-lg bg-[#fffaeb] p-2 text-xs text-[#93370d]">This mentions {leaks.join(', ')}. Companies see these facts, so remove it before saving.</p>}
-    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-      <p className="text-xs text-[#A8A196]">No name, employers, links or private preferences.{onboarded && dirty && ' Save to update.'}</p>
-      {importAvailable && <button type="button" className="text-xs font-semibold text-[var(--sun)] underline" disabled={busy} onClick={() => void rewrite()}>{busy ? 'Writing…' : 'Rewrite from my data'}</button>}
+  const factLine = (f: Fact) => <li key={f.id} className="flex gap-2.5">
+    <span aria-hidden className={f.source === 'cv' ? 'text-[#8a847a]' : 'font-bold text-[var(--sun)]'}>{f.source === 'cv' ? '•' : '✓'}</span>
+    <span>{f.text}</span>
+  </li>;
+  const shown = [...verifiedFacts.filter((f) => !profile.hiddenFacts.includes(f.id)), ...profile.facts.filter((f) => f.text.trim())];
+  const preview = <section aria-label="What companies see" className="rounded-[20px] bg-[var(--ink)] p-5 text-[var(--bg)]">
+    <div className="flex items-center justify-between gap-3">
+      <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--sun)]"><Mark size={26} flower={false} look="ahead" body="#3a3a3a" />What companies see</p>
+      {editing !== 'facts' && <button type="button" className="rounded-full bg-[var(--sun)] px-3.5 py-1.5 text-sm font-semibold text-[var(--ink)]" onClick={() => setEditing('facts')}>Edit</button>}
     </div>
+    <p className="mt-3 text-lg font-semibold">{saved.alias || 'Candidate #…'}</p>
+    {shown.length
+      ? <ul className="mt-2 space-y-1.5 text-[15px] leading-snug text-[#E9E3D8]">{shown.map(factLine)}</ul>
+      : <p className="mt-2 text-sm text-[#A8A196]">Nothing yet. Add your experience and we&apos;ll write this for you.</p>}
+    <p className="mt-4 text-xs text-[#A8A196]"><span className="font-bold text-[var(--sun)]">✓</span> checked by us · <span>•</span> from your CV · no name or employers</p>
+  </section>;
+
+  const factsEditor = <section aria-label="Edit what companies see" className="card space-y-5">
+    <div className="flex items-start justify-between gap-3">
+      <div><h2 className="font-semibold">What companies see</h2><p className="hint">Keep it short and concrete. No name, employers or links.</p></div>
+      {onboarded && <button type="button" className="text-sm font-medium underline underline-offset-4" onClick={() => setEditing('')}>Done</button>}
+    </div>
+    {!!verifiedFacts.length && <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted)]">Checked by us</p>
+      <ul className="mt-2 divide-y divide-[var(--border)]">{verifiedFacts.map((f) => {
+        const on = !profile.hiddenFacts.includes(f.id);
+        return <li key={f.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+          <span className={on ? '' : 'muted line-through'}><span aria-hidden className="mr-2 font-bold text-[#12b76a]">✓</span>{f.text}</span>
+          <button type="button" role="switch" aria-checked={on} aria-label={`Show: ${f.text}`} disabled={busy} onClick={() => change({ hiddenFacts: on ? [...profile.hiddenFacts, f.id] : profile.hiddenFacts.filter((id) => id !== f.id) })}
+            className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${on ? 'bg-[var(--ink)]' : 'bg-[var(--border)]'}`}><span className={`absolute top-0.5 size-5 rounded-full bg-white transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} /></button>
+        </li>;
+      })}</ul>
+    </div>}
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted)]">From your CV</p>
+      <ul className="mt-2 space-y-2">{profile.facts.map((f) => <li key={f.id} className="flex items-start gap-2">
+        <textarea aria-label="Fact" rows={1} className="input field-sizing-content min-h-11 flex-1 resize-none py-2.5 text-sm" maxLength={300} disabled={busy} value={f.text} placeholder="Led a payments ledger rewrite in Go" onChange={(e) => change({ facts: profile.facts.map((x) => (x.id === f.id ? { ...x, text: e.target.value } : x)) })} />
+        <button type="button" aria-label="Remove fact" className="muted grid size-11 shrink-0 place-items-center rounded-xl hover:bg-[var(--bg)]" disabled={busy} onClick={() => change({ facts: profile.facts.filter((x) => x.id !== f.id) })}>✕</button>
+      </li>)}</ul>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {profile.facts.length < 10 && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => change({ facts: [...profile.facts, { id: crypto.randomUUID(), text: '', source: 'cv' }] })}>+ Add a fact</button>}
+        {importAvailable && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => void rewrite()}>{busy ? 'Writing…' : '✨ Write with AI'}</button>}
+      </div>
+    </div>
+    {!!leaks.length && <p role="alert" className="rounded-lg bg-[#fffaeb] p-3 text-sm text-[#93370d]">This mentions {leaks.join(', ')}. Companies see these facts, so remove it before saving.</p>}
   </section>;
 
   if (!onboarded) {
@@ -193,38 +216,78 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       <h1 className="mt-6 text-2xl font-semibold tracking-tight">{titles[step]}</h1>
       <div className="mt-6">{banner}</div>
       {step === 1 && experienceStep}
-      {step === 2 && <div className="space-y-6">{preview}{profileFields}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy || !profile.headline.trim()} onClick={() => setStep(3)}>Continue</button><button className="muted text-sm underline" onClick={() => setStep(1)}>Back</button></div></div>}
+      {step === 2 && <div className="space-y-6">{factsEditor}{profileFields}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy || !profile.headline.trim()} onClick={() => setStep(3)}>Continue</button><button className="muted text-sm underline" onClick={() => setStep(1)}>Back</button></div></div>}
       {step === 3 && <div className="space-y-6">{preferenceFields}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Start getting matched'}</button><button className="muted text-sm underline" onClick={() => setStep(2)}>Back</button></div></div>}
     </main>;
   }
 
   const has = (src: string) => profile.verified.some((v) => v.source === src);
-  const connections = [
+  const accounts = [
     { name: 'Google', status: me.email || 'Signed in', done: true },
-    ...(workEmailAvailable ? [{ name: 'Work email', status: has('work-email') ? 'Verified' : 'Not verified', done: has('work-email'), href: '/talent/verify/work-email' }] : []),
-    ...(githubAvailable ? [{ name: 'GitHub', status: has('github') ? 'Connected' : 'Not connected', done: has('github'), href: '/talent/auth/github/start' }] : []),
-    ...(linkedinAvailable ? [{ name: 'LinkedIn', status: has('linkedin') ? 'Connected' : 'Not connected', done: has('linkedin'), href: '/talent/auth/linkedin/start' }] : []),
+    ...(workEmailAvailable ? [{ name: 'Work email', status: has('work-email') ? 'Verified' : 'Shows companies you work in tech', done: has('work-email'), href: '/talent/verify/work-email' }] : []),
+    ...(githubAvailable ? [{ name: 'GitHub', status: has('github') ? 'Connected' : 'Adds checked facts from your public work', done: has('github'), href: '/talent/auth/github/start' }] : []),
+    ...(linkedinAvailable ? [{ name: 'LinkedIn', status: has('linkedin') ? 'Connected' : 'Confirms you are a real person', done: has('linkedin'), href: '/talent/auth/linkedin/start' }] : []),
   ];
-  return <main className="mx-auto max-w-xl px-4 py-8 space-y-6">
-    {banner}
+  const visibleRoles = profile.experience.filter((r) => r.title.trim());
+  const prefSummary = [
+    saved.salary.min ? `${saved.salary.currency} ${saved.salary.min.toLocaleString('en-US')}+` : '',
+    saved.workModes.map((m) => WORK_MODES.find((w) => w.mode === m)?.label).join(' · '),
+    saved.locations.join(', '),
+  ].filter(Boolean);
+  const editBtn = (what: typeof editing, label = 'Edit') => <button type="button" className="text-sm font-medium underline underline-offset-4" onClick={() => setEditing(editing === what ? '' : what)}>{editing === what ? 'Close' : label}</button>;
+  const sectionHead = (title: string, note: string, action: React.ReactNode) => <div className="flex items-start justify-between gap-3">
+    <div><h2 className="font-semibold">{title}</h2><p className="muted text-sm">{note}</p></div>{action}
+  </div>;
+
+  return <main className="mx-auto max-w-xl space-y-5 px-4 pb-28 pt-8">
     <div className="flex items-center justify-between gap-3">
-      <span className="inline-flex items-center gap-2 text-sm font-medium"><span className={`size-2 rounded-full ${saved.paused ? 'bg-[var(--muted)]' : 'bg-[#12b76a]'}`} />{saved.paused ? 'Paused' : 'Open to conversations'}</span>
-      <button className="btn text-sm" disabled={busy} onClick={() => void toggleOpen()}>{saved.paused ? 'Resume' : 'Pause'}</button>
+      <h1 className="text-[28px] leading-none">Your profile</h1>
+      <button type="button" role="switch" aria-checked={!saved.paused} disabled={busy} onClick={() => void toggleOpen()} className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] py-1.5 pl-3 pr-1.5 text-sm font-medium">
+        {saved.paused ? 'Paused' : 'Open to talk'}
+        <span className={`relative h-6 w-10 rounded-full transition-colors ${saved.paused ? 'bg-[var(--border)]' : 'bg-[#12b76a]'}`}><span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${saved.paused ? 'left-0.5' : 'left-[18px]'}`} /></span>
+      </button>
     </div>
-    {preview}
-    <section aria-label="Connections">
-      <h2 className="mb-2 font-semibold">Connections</h2>
-      <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface)]">
-        {connections.map((c) => <li key={c.name} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-          <span className="min-w-0"><span className="block font-medium">{c.name}</span><span className="muted block truncate">{c.done ? '✓ ' : ''}{c.status}</span></span>
-          {'href' in c && c.href && <a className="btn min-h-9 text-sm" href={c.href}>{c.done ? 'Refresh' : 'Connect'}</a>}
+    {banner}
+    {editing === 'facts' ? factsEditor : preview}
+
+    <section aria-label="Experience" className="card space-y-4">
+      {sectionHead('Experience', 'Private. Your agent uses it to answer questions.', editBtn('experience'))}
+      {editing === 'experience' ? profileFields : editing === 'import' ? experienceStep : <>
+        {profile.headline && <p className="font-medium">{profile.headline}</p>}
+        {visibleRoles.length
+          ? <ul className="space-y-1 text-sm">{visibleRoles.slice(0, 5).map((r) => <li key={r.id} className="flex justify-between gap-3"><span className="truncate">{r.title}</span><span className="muted shrink-0">{[when(r.start), when(r.end) || (r.start ? 'Present' : '')].filter(Boolean).join(' – ')}</span></li>)}</ul>
+          : <p className="muted text-sm">No roles yet.</p>}
+        {importAvailable && <button type="button" className="btn w-full justify-center text-sm" onClick={() => setEditing('import')}>Update from CV or LinkedIn PDF</button>}
+      </>}
+    </section>
+
+    <section aria-label="What matters to you" className="card space-y-4">
+      {sectionHead('What matters to you', 'Private. Your agent says no for you.', editBtn('prefs'))}
+      {editing === 'prefs' ? preferenceFields
+        : prefSummary.length || saved.noGos ? <div className="space-y-2">
+          {!!prefSummary.length && <div className="flex flex-wrap gap-1.5">{prefSummary.map((p) => <span key={p} className="pill text-sm">{p}</span>)}</div>}
+          {saved.noGos && <p className="text-sm"><span className="muted">No-gos:</span> {saved.noGos}</p>}
+        </div> : <p className="muted text-sm">Salary, locations and no-gos. Add them so your agent can decide for you.</p>}
+    </section>
+
+    <section aria-label="Accounts" className="card space-y-3">
+      {sectionHead('Accounts', 'Personal accounts only, never one your employer owns.', null)}
+      <ul className="divide-y divide-[var(--border)]">
+        {accounts.map((c) => <li key={c.name} className="flex items-center justify-between gap-3 py-3 text-sm">
+          <span className="min-w-0"><span className="flex items-center gap-1.5 font-medium">{c.name}{c.done && <span aria-label="connected" className="text-[#12b76a]">✓</span>}</span><span className="muted block truncate">{c.status}</span></span>
+          {'href' in c && c.href && !c.done && <a className="btn min-h-9 shrink-0 text-sm" href={c.href}>Connect</a>}
         </li>)}
       </ul>
-      <p className="hint mt-2">Connect only personal accounts. Never connect a GitHub or LinkedIn account your employer owns, and don’t upload company documents.</p>
     </section>
-    <details><summary className="cursor-pointer font-semibold">Update from a CV or LinkedIn PDF</summary><div className="mt-4">{experienceStep}</div></details>
-    <details><summary className="cursor-pointer font-semibold">Edit profile</summary><div className="mt-4">{profileFields}</div></details>
-    <details><summary className="cursor-pointer font-semibold">What matters to you</summary><div className="mt-4">{preferenceFields}</div></details>
-    {dirty && <div className="sticky bottom-0 -mx-4 flex items-center gap-3 border-t border-[var(--border)] bg-[var(--bg)] px-4 py-3"><button className="btn-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save changes'}</button><span className="muted text-sm">Unsaved changes</span></div>}
+
+    {dirty && <div className="fixed inset-x-0 bottom-0 z-10 border-t border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur">
+      <div className="mx-auto flex max-w-xl items-center justify-between gap-3 px-4 py-3">
+        <span className="muted text-sm">Unsaved changes</span>
+        <div className="flex gap-2">
+          <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => { setProfile(saved); setDomains(saved.employerDomains.join(', ')); setLocationsText(saved.locations.join(', ')); setSalaryMin(saved.salary.min !== undefined ? String(saved.salary.min) : ''); setCurrency(saved.salary.currency); setEditing(''); }}>Discard</button>
+          <button type="button" className="btn-primary min-h-10" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    </div>}
   </main>;
 }
