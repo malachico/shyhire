@@ -209,7 +209,7 @@ export function firestoreLlmMeter(db: Firestore, allowanceUsd = Number(process.e
   };
 }
 
-function domainBlocked(candidateDomain: string, searcherDomains: Iterable<string>): boolean {
+export function domainBlocked(candidateDomain: string, searcherDomains: Iterable<string>): boolean {
   const blocked = candidateDomain.toLowerCase();
   for (const raw of searcherDomains) {
     const domain = raw.toLowerCase();
@@ -355,6 +355,21 @@ export class Profiles {
       tx.set(ref, next);
     };
     if (transaction) await write(transaction); else await this.db.runTransaction(write);
+  }
+  async recordContact(
+    personId: string,
+    contact: { githubLogin?: string; workEmail?: string; domain?: string },
+    transaction?: Transaction,
+  ): Promise<void> {
+    if (typeof personId !== 'string' || !personId.trim()) return;
+    const id = personId.trim();
+    const ref = this.db.collection('talent_contacts').doc(id);
+    const payload: Record<string, string> = { updatedAt: new Date().toISOString() };
+    if (typeof contact.githubLogin === 'string' && contact.githubLogin.trim()) payload.githubLogin = contact.githubLogin.trim();
+    if (typeof contact.workEmail === 'string' && contact.workEmail.trim()) payload.workEmail = contact.workEmail.trim().toLowerCase();
+    if (typeof contact.domain === 'string' && contact.domain.trim()) payload.domain = contact.domain.trim().toLowerCase();
+    if (transaction) transaction.set(ref, payload, { merge: true });
+    else await ref.set(payload, { merge: true });
   }
 }
 

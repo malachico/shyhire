@@ -64,6 +64,37 @@ export function TalentRoomDetailView({ room, backHref, backLabel }: { room: Tale
           </dl>
         )}
         {room.needsDecision && <TalentRoomDecisionForm roomId={room.id} question={room.needsDecision.question} options={room.needsDecision.options} />}
+        {room.revealedContact && (
+          <div aria-label="Revealed contact details" className="mt-5 rounded-lg border border-[var(--accent)] bg-[var(--accent-bg)] p-4 text-sm">
+            <p className="font-semibold text-[var(--accent)]">
+              Match confirmed — {room.revealedContact.side === 'candidate' ? 'Candidate' : 'Company'} contact details
+            </p>
+            <dl className="mt-2 grid gap-2 sm:grid-cols-3">
+              <div>
+                <dt className="text-xs text-[var(--muted)]">{room.revealedContact.side === 'candidate' ? 'Candidate' : 'Company'}</dt>
+                <dd className="mt-0.5 font-medium">{room.revealedContact.displayName}</dd>
+              </div>
+              {room.revealedContact.email && (
+                <div>
+                  <dt className="text-xs text-[var(--muted)]">Verified work email</dt>
+                  <dd className="mt-0.5 font-medium">
+                    <a href={`mailto:${room.revealedContact.email}`} className="underline">{room.revealedContact.email}</a>
+                  </dd>
+                </div>
+              )}
+              {room.revealedContact.githubLogin && (
+                <div>
+                  <dt className="text-xs text-[var(--muted)]">GitHub</dt>
+                  <dd className="mt-0.5 font-medium">
+                    <a href={room.revealedContact.githubUrl ?? `https://github.com/${room.revealedContact.githubLogin}`} target="_blank" rel="noreferrer" className="underline">
+                      @{room.revealedContact.githubLogin}
+                    </a>
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
       </header>
       <section aria-label="Shared fit summary" className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">

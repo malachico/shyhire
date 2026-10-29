@@ -20,6 +20,7 @@ export async function GET(request: Request) {
     if (!flow?.state || !flow.verifier || !code || !same(flow.state, state)) throw new Error('Invalid sign-in state');
     const account = await githubAccount(code, flow.verifier);
     await profiles().verify(String(account.id), account.verification);
+    await profiles().recordContact(String(account.id), { githubLogin: account.login });
     await startSession({ githubId: account.id, login: account.login });
     return NextResponse.redirect(`${appUrl()}/talent/profile`);
   } catch (error) {

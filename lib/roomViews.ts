@@ -1,7 +1,7 @@
 import { FieldValue, type Firestore } from '@google-cloud/firestore';
 import { db } from './db.ts';
-import { parly, ParlyError, type Room, type RoomMessage, type RoomStatus } from './parly.ts';
-import { callerOf, TalentError, text, type TalentCaller } from './profiles.ts';
+import { parly, ParlyError, type Room, type RoomMessage, type RoomStatus, type SideInput } from './parly.ts';
+import { callerOf, domainBlocked, TalentError, text, verifiedDomains, type TalentCaller, type TalentProfile } from './profiles.ts';
 
 export type RoomSideKind = 'company' | 'candidate';
 
@@ -17,6 +17,15 @@ export interface TalentRoomDecision {
   options: string[];
 }
 
+export interface TalentRevealedContact {
+  side: RoomSideKind;
+  displayName: string;
+  email?: string;
+  githubLogin?: string;
+  githubUrl?: string;
+  verifiedDomains: string[];
+}
+
 export interface StoredTalentRoom {
   companyId: string;
   companyName: string;
@@ -29,6 +38,7 @@ export interface StoredTalentRoom {
   createdAt: string;
   updatedAt: string;
   lastEventId?: string;
+  seenEventIds?: string[];
 }
 
 export interface CompanyRoomSummary {
@@ -76,17 +86,27 @@ export interface TalentRoomDetail {
   waitingOn?: RoomSideKind;
   needsDecision?: TalentRoomDecision;
   document?: TalentRoomDocumentView;
+  revealedContact?: TalentRevealedContact;
   messages: RoomMessage[];
   createdAt: string;
   updatedAt: string;
 }
 
 export interface ParlyRoomsClient {
+  createAgent?: (key: string, name: string, instructions: string) => Promise<{ key: string; name: string }>;
+  openRoom?: (body: { goal: string; sides: [SideInput, SideInput]; metadata?: Record<string, string> }) => Promise<{ id: string; status: RoomStatus }>;
   getRoom: (roomId: string) => Promise<Room>;
   messages: (roomId: string, side: string, after?: string) => Promise<{ messages: RoomMessage[] }>;
   decide: (roomId: string, decisionId: string, choice: string) => Promise<{ ok: true }>;
   approve: (roomId: string, side: string, version: number) => Promise<{ ok: true; agreed: boolean }>;
 }
+
+const HIRING_AGENT_KEY = 'hiring-rep';
+const CANDIDATE_AGENT_KEY = 'candidate-rep';
+const HIRING_AGENT_INSTRUCTIONS =
+  'You represent the hiring company in an anonymous Parly Talent room. Evaluate mutual role, technical, compensation, and working-mode fit against your private brief without asking for or revealing personal identifiers. Use ASK MY SIDE when you need a decision from the hiring team, and draft/update the shared fit summary once fit is clear.';
+const CANDIDATE_AGENT_INSTRUCTIONS =
+  'You represent the candidate in an anonymous Parly Talent room. Protect candidate anonymity strictly: never reveal names, employers, URLs, or raw private text. Evaluate mutual fit against your private brief, use ASK MY SIDE when a decision is needed from the candidate, and draft/update the shared fit summary once fit is clear.';
 
 const VALID_STATUSES = new Set<RoomStatus>(['talking', 'needs_decision', 'agreed', 'stuck', 'closed']);
 
@@ -147,6 +167,7 @@ export class TalentRoomViews {
   private readonly store: Firestore;
   private readonly parlyClient: ParlyRoomsClient;
   private readonly col;
+  private agentsEnsured = false;
 
   constructor(
     store: Firestore = db(),
@@ -155,6 +176,232 @@ export class TalentRoomViews {
     this.store = store;
     this.parlyClient = parlyClient;
     this.col = this.store.collection('talent_rooms');
+  }
+
+  private async ensureAgentTemplates(): Promise<void> {
+    if (this.agentsEnsured || !this.parlyClient.createAgent) return;
+    await Promise.all([
+      this.parlyClient.createAgent(HIRING_AGENT_KEY, 'Hiring representative', HIRING_AGENT_INSTRUCTIONS),
+      this.parlyClient.createAgent(CANDIDATE_AGENT_KEY, 'Candidate representative', CANDIDATE_AGENT_INSTRUCTIONS),
+    ]);
+    this.agentsEnsured = true;
+  }
+
+  private async resolveRevealedContact(targetSide: RoomSideKind, record: StoredTalentRoom): Promise<TalentRevealedContact> {
+    const personId = targetSide === 'company' ? String(record.companyId ?? '') : String(record.candidateId ?? '');
+    const [contactSnap, emailSnap, profileSnap] = await Promise.all([
+      personId ? this.store.collection('talent_contacts').doc(personId).get() : Promise.resolve(undefined),
+      personId ? this.store.collection('talent_email_challenges').doc(personId).get() : Promise.resolve(undefined),
+      personId ? this.store.collection('profiles').doc(personId).get() : Promise.resolve(undefined),
+    ]);
+    const contactData = (contactSnap?.data() ?? {}) as { githubLogin?: unknown; workEmail?: unknown; domain?: unknown };
+    const emailChallenge = (emailSnap?.data() ?? {}) as { email?: unknown; domain?: unknown; consumed?: unknown };
+    const profile = profileSnap?.data() as TalentProfile | undefined;
+
+    const githubLogin = typeof contactData.githubLogin === 'string' && contactData.githubLogin.trim()
+      ? contactData.githubLogin.trim()
+      : undefined;
+    const email = typeof contactData.workEmail === 'string' && contactData.workEmail.trim()
+      ? contactData.workEmail.trim()
+      : emailChallenge.consumed === true && typeof emailChallenge.email === 'string' && emailChallenge.email.trim()
+        ? emailChallenge.email.trim()
+        : undefined;
+    const domains = new Set<string>(verifiedDomains(profile?.verified ?? []));
+    if (typeof contactData.domain === 'string' && contactData.domain.trim()) domains.add(contactData.domain.trim().toLowerCase());
+    if (emailChallenge.consumed === true && typeof emailChallenge.domain === 'string' && emailChallenge.domain.trim()) {
+      domains.add(emailChallenge.domain.trim().toLowerCase());
+    }
+    if (targetSide === 'company' && record.companyName) domains.add(record.companyName.toLowerCase());
+
+    const displayName = targetSide === 'company'
+      ? record.companyName || (githubLogin ? `@${githubLogin}` : 'Company')
+      : githubLogin
+        ? `@${githubLogin}`
+        : email ?? record.candidateAlias;
+
+    return {
+      side: targetSide,
+      displayName,
+      ...(email ? { email } : {}),
+      ...(githubLogin ? { githubLogin, githubUrl: `https://github.com/${githubLogin}` } : {}),
+      verifiedDomains: [...domains],
+    };
+  }
+
+  /**
+   * A: Opens a room from a candidate search result with a private company brief (`role`, `comp`, `mustHaves`).
+   * Calls `POST /v1/rooms` with opaque refs (`company` and `candidate`) and stores `talent_rooms/{parlyRoomId}`.
+   */
+  async openRoom(caller: TalentCaller, raw: unknown): Promise<{ id: string; status: RoomStatus }> {
+    const { id: companyId } = callerOf(caller, 'Sign in as a person to open a room');
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new TalentError('invalid', 'Expected room details');
+    const body = raw as Record<string, unknown>;
+    const candidateAlias = text(body.candidateAlias ?? body.alias ?? '', 80, 'candidateAlias');
+    if (!/^Candidate #[a-f0-9]{8,36}$/i.test(candidateAlias)) {
+      throw new TalentError('invalid', 'Valid candidate alias is required');
+    }
+
+    const rawBrief = body.brief && typeof body.brief === 'object' && !Array.isArray(body.brief)
+      ? (body.brief as Record<string, unknown>)
+      : body;
+    const role = text(rawBrief.role ?? '', 200, 'role');
+    if (!role) throw new TalentError('invalid', 'Enter the role title');
+    const comp = text(rawBrief.comp ?? '', 200, 'comp');
+    const mustHaves = text(rawBrief.mustHaves ?? '', 2000, 'mustHaves');
+
+    const companyProfile = (await this.store.collection('profiles').doc(companyId).get()).data() as TalentProfile | undefined;
+    const companyDomains = verifiedDomains(companyProfile?.verified ?? []);
+    if (!companyDomains.length) {
+      throw new TalentError('forbidden', 'Verify your work email before opening a room');
+    }
+    const companyName = companyDomains[0]!;
+
+    const candidateSnap = await this.store.collection('profiles').where('alias', '==', candidateAlias).limit(5).get();
+    const candidateDoc = candidateSnap.docs.find((d) => (d.data() as TalentProfile).searchable === true);
+    if (!candidateDoc || candidateDoc.id === companyId) {
+      throw new TalentError('not_found', 'Candidate not found');
+    }
+    const candidateProfile = candidateDoc.data() as TalentProfile;
+    if ((candidateProfile.employerDomains ?? []).some((d) => domainBlocked(d, companyDomains))) {
+      throw new TalentError('not_found', 'Candidate not found');
+    }
+
+    if (!this.parlyClient.openRoom) {
+      throw new TalentError('unavailable', 'Room creation is not configured');
+    }
+
+    const companyBriefText = [
+      `Company: ${companyName}`,
+      `Role: ${role}`,
+      comp ? `Compensation band: ${comp}` : '',
+      mustHaves ? `Must-haves and private notes: ${mustHaves}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const candidateBriefText = [
+      candidateProfile.publicSummary,
+      candidateProfile.openTo ? `Open to: ${candidateProfile.openTo}` : '',
+      candidateProfile.preferences
+        ? `Private candidate preferences (never quote raw text; use to evaluate fit and decide): ${candidateProfile.preferences}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const goal = `Evaluate fit: ${companyName} (${role}) × ${candidateProfile.alias}`.slice(0, 200);
+    const sides: [SideInput, SideInput] = [
+      { ref: 'company', name: companyName.slice(0, 60), brief: companyBriefText.slice(0, 4000), agent: HIRING_AGENT_KEY },
+      { ref: 'candidate', name: candidateProfile.alias.slice(0, 60), brief: candidateBriefText.slice(0, 4000), agent: CANDIDATE_AGENT_KEY },
+    ];
+
+    try {
+      await this.ensureAgentTemplates();
+      let opened: { id: string; status: RoomStatus };
+      try {
+        opened = await this.parlyClient.openRoom({ goal, sides });
+      } catch (err) {
+        if (err instanceof ParlyError && err.status === 400 && /No agent/i.test(err.message) && this.parlyClient.createAgent) {
+          this.agentsEnsured = false;
+          await this.ensureAgentTemplates();
+          opened = await this.parlyClient.openRoom({ goal, sides });
+        } else {
+          throw err;
+        }
+      }
+      const now = new Date().toISOString();
+      const status = normalizeStatus(opened.status);
+      const record: StoredTalentRoom = {
+        companyId,
+        companyName,
+        candidateId: candidateDoc.id,
+        candidateAlias: candidateProfile.alias,
+        brief: { role, comp, mustHaves },
+        status,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await this.col.doc(opened.id).set(record);
+      return { id: opened.id, status };
+    } catch (err) {
+      rethrowParlyError(err);
+    }
+  }
+
+  /**
+   * B: Processes a signed Parly room webhook (`needs_decision`, `document_updated`, `agreed`, `stuck`, `closed`).
+   * Idempotent on `event.id` (`lastEventId` / `seenEventIds`).
+   */
+  async handleWebhookEvent(raw: unknown): Promise<{ ok: true; duplicate?: boolean; ignored?: boolean }> {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new TalentError('invalid', 'Invalid webhook payload');
+    }
+    const evt = raw as Record<string, unknown>;
+    const eventId = text(evt.id ?? '', 200, 'id');
+    const rawType = text(evt.type ?? '', 80, 'type');
+    if (!eventId || !rawType) throw new TalentError('invalid', 'Webhook event id and type are required');
+    const kind = rawType.startsWith('room.') ? rawType.slice('room.'.length) : rawType;
+    const data = evt.data && typeof evt.data === 'object' && !Array.isArray(evt.data)
+      ? (evt.data as Record<string, unknown>)
+      : {};
+    const roomId = typeof data.roomId === 'string' ? data.roomId.trim() : '';
+    if (!roomId) return { ok: true, ignored: true };
+
+    const ref = this.col.doc(roomId);
+    return this.store.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return { ok: true, ignored: true };
+      const current = snap.data() as StoredTalentRoom;
+      const seen = Array.isArray(current.seenEventIds) ? current.seenEventIds : [];
+      if (current.lastEventId === eventId || seen.includes(eventId)) {
+        return { ok: true, duplicate: true };
+      }
+
+      const now = new Date().toISOString();
+      const nextSeen = [...seen.slice(-49), eventId];
+      const updates: Record<string, unknown> = {
+        lastEventId: eventId,
+        seenEventIds: nextSeen,
+        updatedAt: now,
+      };
+
+      if (kind === 'needs_decision') {
+        const side = sideKindOfRef(typeof data.side === 'string' ? data.side : '', undefined, current);
+        const question = typeof data.question === 'string' ? data.question.trim() : '';
+        const options = Array.isArray(data.options)
+          ? data.options.filter((o): o is string => typeof o === 'string' && Boolean(o.trim())).map((o) => o.trim())
+          : [];
+        if (side && question) {
+          updates.status = 'needs_decision';
+          updates.needsDecision = { side, question, options };
+        }
+      } else if (kind === 'document_updated') {
+        if (typeof data.version === 'number' && Number.isInteger(data.version) && data.version > 0) {
+          updates.documentVersion = data.version;
+        }
+        if (current.status === 'needs_decision') {
+          updates.status = 'talking';
+          updates.needsDecision = FieldValue.delete();
+        }
+      } else if (kind === 'agreed') {
+        updates.status = 'agreed';
+        updates.needsDecision = FieldValue.delete();
+        if (typeof data.version === 'number' && Number.isInteger(data.version) && data.version > 0) {
+          updates.documentVersion = data.version;
+        }
+      } else if (kind === 'stuck') {
+        updates.status = 'stuck';
+        updates.needsDecision = FieldValue.delete();
+      } else if (kind === 'closed') {
+        updates.status = 'closed';
+        updates.needsDecision = FieldValue.delete();
+      } else {
+        return { ok: true, ignored: true };
+      }
+
+      tx.set(ref, updates, { merge: true });
+      return { ok: true };
+    });
   }
 
   private async loadForViewer(
@@ -274,6 +521,10 @@ export class TalentRoomViews {
         };
       }
 
+      const revealedContact = status === 'agreed'
+        ? await this.resolveRevealedContact(otherSide, record)
+        : undefined;
+
       return {
         id,
         viewerSide,
@@ -285,6 +536,7 @@ export class TalentRoomViews {
         ...(waitingOn ? { waitingOn } : {}),
         ...(myDecision ? { needsDecision: myDecision } : {}),
         ...(document ? { document } : {}),
+        ...(revealedContact ? { revealedContact } : {}),
         messages: Array.isArray(messages) ? messages : [],
         createdAt: typeof record.createdAt === 'string' ? record.createdAt : '',
         updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : '',

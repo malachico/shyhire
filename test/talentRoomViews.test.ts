@@ -177,6 +177,186 @@ describe('Talent company rooms (C) and candidate requests (D)', () => {
     const finalRooms = await views.listCompanyRooms('gh-comp');
     assert.equal(finalRooms[0]!.status, 'agreed');
   });
+
+  it('A: opens a room with opaque refs, enforces work-email and employer-domain blocks, and stores talent_rooms/{parlyRoomId}', async () => {
+    const db = testDb();
+    const { Profiles } = await import('../lib/profiles.ts');
+    const profiles = new Profiles(db);
+
+    const company = { id: 'gh-company-open', kind: 'human' as const };
+    const candidate = { id: 'gh-candidate-open', kind: 'human' as const };
+    const blockedCandidate = { id: 'gh-candidate-blocked', kind: 'human' as const };
+
+    const savedCand = await profiles.save(candidate, {
+      version: 0,
+      headline: 'Backend engineer Go PostgreSQL',
+      openTo: 'Remote backend engineer',
+      preferences: 'Minimum $190k base; remote US only',
+      employerDomains: ['current-job.test'],
+      experience: [{ title: 'Backend engineer', company: 'Current Job', description: 'Go and PostgreSQL', start: '2021', end: '2025' }],
+    });
+    const savedBlocked = await profiles.save(blockedCandidate, {
+      version: 0,
+      headline: 'Backend engineer Go',
+      employerDomains: ['acme.test'],
+    });
+
+    const createdAgents: { key: string; name: string }[] = [];
+    const openedPayloads: { goal: string; sides: { ref: string; name: string; brief: string; agent: string }[] }[] = [];
+    const { client } = fakeParlyClient({});
+    client.createAgent = async (key, name) => {
+      createdAgents.push({ key, name });
+      return { key, name };
+    };
+    client.openRoom = async (body) => {
+      openedPayloads.push(body);
+      return { id: 'parly-room-99', status: 'talking' };
+    };
+
+    const views = new TalentRoomViews(db, client);
+
+    await assert.rejects(
+      views.openRoom(company, { candidateAlias: savedCand.alias, brief: { role: 'Senior Go Engineer', comp: '$200k', mustHaves: 'Go, Postgres' } }),
+      /Verify your work email/,
+    );
+
+    await profiles.verify(company.id, {
+      id: 'work-email:sub.acme.test',
+      source: 'work-email',
+      label: 'Work email verified',
+      verifiedAt: '2026-10-29T05:00:00.000Z',
+      data: { domain: 'sub.acme.test' },
+    });
+
+    await assert.rejects(
+      views.openRoom(company, { candidateAlias: savedBlocked.alias, brief: { role: 'Senior Go Engineer', comp: '$200k', mustHaves: 'Go' } }),
+      /Candidate not found/,
+    );
+
+    const opened = await views.openRoom(company, {
+      candidateAlias: savedCand.alias,
+      brief: { role: 'Senior Go Engineer', comp: '$200k', mustHaves: 'Go, PostgreSQL' },
+    });
+    assert.deepEqual(opened, { id: 'parly-room-99', status: 'talking' });
+    assert.equal(createdAgents.length, 2);
+    assert.equal(openedPayloads.length, 1);
+    const sent = openedPayloads[0]!;
+    assert.equal(sent.sides[0]!.ref, 'company');
+    assert.equal(sent.sides[0]!.name, 'sub.acme.test');
+    assert.match(sent.sides[0]!.brief, /Senior Go Engineer/);
+    assert.equal(sent.sides[1]!.ref, 'candidate');
+    assert.equal(sent.sides[1]!.name, savedCand.alias);
+    assert.match(sent.sides[1]!.brief, /Minimum \$190k base/);
+    assert.doesNotMatch(JSON.stringify(sent), /gh-company-open|gh-candidate-open/);
+
+    const stored = (await db.collection('talent_rooms').doc('parly-room-99').get()).data() as StoredTalentRoom;
+    assert.equal(stored.companyId, 'gh-company-open');
+    assert.equal(stored.companyName, 'sub.acme.test');
+    assert.equal(stored.candidateId, 'gh-candidate-open');
+    assert.equal(stored.candidateAlias, savedCand.alias);
+    assert.equal(stored.status, 'talking');
+  });
+
+  it('B & E: processes webhook events idempotently on event.id and reveals contact details only when status is agreed', async () => {
+    const db = testDb();
+    const { Profiles } = await import('../lib/profiles.ts');
+    const profiles = new Profiles(db);
+
+    await profiles.recordContact('gh-comp-e', { githubLogin: 'acme-cto', workEmail: 'cto@acme.io', domain: 'acme.io' });
+    await profiles.recordContact('gh-cand-e', { githubLogin: 'jane-systems', workEmail: 'jane@work.example', domain: 'work.example' });
+
+    await db.collection('talent_rooms').doc('room-webhook-1').set({
+      companyId: 'gh-comp-e',
+      companyName: 'acme.io',
+      candidateId: 'gh-cand-e',
+      candidateAlias: 'Candidate #feedcafe',
+      brief: { role: 'Systems Architect', comp: '$240k', mustHaves: 'Rust' },
+      status: 'talking',
+      createdAt: '2026-10-29T05:00:00.000Z',
+      updatedAt: '2026-10-29T05:00:00.000Z',
+    } satisfies StoredTalentRoom);
+
+    const liveRooms: Record<string, { room: Room; messagesBySide: Record<string, RoomMessage[]> }> = {
+      'room-webhook-1': {
+        room: {
+          id: 'room-webhook-1',
+          status: 'talking',
+          goal: 'Evaluate fit',
+          sides: [
+            { ref: 'company', name: 'acme.io' },
+            { ref: 'candidate', name: 'Candidate #feedcafe' },
+          ],
+          pending: [],
+        },
+        messagesBySide: { company: [], candidate: [] },
+      },
+    };
+    const { client } = fakeParlyClient(liveRooms);
+    const views = new TalentRoomViews(db, client);
+
+    const beforeComp = await views.getRoomView('gh-comp-e', 'room-webhook-1');
+    const beforeCand = await views.getRoomView('gh-cand-e', 'room-webhook-1');
+    assert.equal(beforeComp.revealedContact, undefined);
+    assert.equal(beforeCand.revealedContact, undefined);
+    assert.doesNotMatch(JSON.stringify(beforeComp), /jane-systems|jane@work\.example/);
+    assert.doesNotMatch(JSON.stringify(beforeCand), /acme-cto|cto@acme\.io/);
+
+    const first = await views.handleWebhookEvent({
+      id: 'evt_dec_1',
+      type: 'room.needs_decision',
+      data: { roomId: 'room-webhook-1', side: 'candidate', question: 'Confirm notice period?', options: ['2 weeks', '4 weeks'] },
+    });
+    assert.deepEqual(first, { ok: true });
+    const dup = await views.handleWebhookEvent({
+      id: 'evt_dec_1',
+      type: 'room.needs_decision',
+      data: { roomId: 'room-webhook-1', side: 'company', question: 'Mutated duplicate should be ignored', options: ['No'] },
+    });
+    assert.deepEqual(dup, { ok: true, duplicate: true });
+
+    let snap = (await db.collection('talent_rooms').doc('room-webhook-1').get()).data() as StoredTalentRoom;
+    assert.equal(snap.status, 'needs_decision');
+    assert.equal(snap.needsDecision?.side, 'candidate');
+    assert.equal(snap.needsDecision?.question, 'Confirm notice period?');
+    assert.equal(snap.lastEventId, 'evt_dec_1');
+
+    await views.handleWebhookEvent({
+      id: 'evt_doc_2',
+      type: 'room.document_updated',
+      data: { roomId: 'room-webhook-1', version: 3 },
+    });
+    snap = (await db.collection('talent_rooms').doc('room-webhook-1').get()).data() as StoredTalentRoom;
+    assert.equal(snap.status, 'talking');
+    assert.equal(snap.documentVersion, 3);
+    assert.equal(snap.needsDecision, undefined);
+
+    const replayOld = await views.handleWebhookEvent({
+      id: 'evt_dec_1',
+      type: 'room.stuck',
+      data: { roomId: 'room-webhook-1' },
+    });
+    assert.deepEqual(replayOld, { ok: true, duplicate: true });
+
+    await views.handleWebhookEvent({
+      id: 'evt_agreed_3',
+      type: 'room.agreed',
+      data: { roomId: 'room-webhook-1', version: 3 },
+    });
+    liveRooms['room-webhook-1']!.room.status = 'agreed';
+
+    const afterComp = await views.getRoomView('gh-comp-e', 'room-webhook-1');
+    assert.equal(afterComp.status, 'agreed');
+    assert.equal(afterComp.revealedContact?.side, 'candidate');
+    assert.equal(afterComp.revealedContact?.githubLogin, 'jane-systems');
+    assert.equal(afterComp.revealedContact?.email, 'jane@work.example');
+
+    const afterCand = await views.getRoomView('gh-cand-e', 'room-webhook-1');
+    assert.equal(afterCand.status, 'agreed');
+    assert.equal(afterCand.revealedContact?.side, 'company');
+    assert.equal(afterCand.revealedContact?.displayName, 'acme.io');
+    assert.equal(afterCand.revealedContact?.githubLogin, 'acme-cto');
+    assert.equal(afterCand.revealedContact?.email, 'cto@acme.io');
+  });
 });
 
 
