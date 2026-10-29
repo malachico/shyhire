@@ -31,8 +31,13 @@ See `.env.example`: `APP_URL`, `SESSION_SECRET` (32+ chars), `TALENT_GITHUB_CLIE
 ```
 npm install
 npm run dev        # http://localhost:3100
-npm test           # session + webhook signature checks
+npm test           # session, webhook, profile, work-email, connection and search checks
 npm run build
 ```
 
-Not here yet: a database (profiles, verifications, search) and the room screens.
+## Database & Profiles
+
+- `lib/db.ts`: Firestore in Talent's own GCP project (`parly-talent-0a7c87`). On Vercel production it authenticates via Vercel OIDC + GCP Workload Identity Federation (`@vercel/oidc` + `ExternalAccountClient`); locally and in tests it uses `FIRESTORE_EMULATOR_HOST`.
+- `lib/profiles.ts`: candidate profiles, professional-only normalization (`professionalDraft`, `publicSummary`), transient CV/PDF draft extraction, and anonymous candidate search (`search`).
+- `lib/github.ts`, `lib/workEmail.ts`, `lib/linkedin.ts`: GitHub public activity extraction, private one-time code work-email verification, and LinkedIn account connection via Composio.
+

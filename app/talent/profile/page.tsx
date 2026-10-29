@@ -1,14 +1,21 @@
-import { redirect } from 'next/navigation';
 import { currentSession } from '@/lib/auth';
+import { profileImportConfigured, profiles, talentLinkedIn, workEmailConfigured } from '@/lib/talent';
+import { TalentProfileEditor } from '@/components/TalentProfileEditor';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Profile() {
+export default async function CandidateProfile({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
   const session = await currentSession();
-  if (!session) redirect('/');
-  return <main className="mx-auto max-w-lg px-6 py-20">
-    <h1 className="text-2xl font-semibold tracking-tight">Your profile</h1>
-    <p className="my-4 text-[var(--muted)]">Signed in with GitHub as <span className="font-mono text-[var(--fg)]">{session.login}</span>. Your profile comes next.</p>
-    <form action="/talent/auth/signout" method="post"><button className="btn">Sign out</button></form>
-  </main>;
+  if (!session) {
+    return <main className="mx-auto max-w-lg px-6 py-20">
+      <h1 className="text-3xl font-semibold tracking-tight">Your next chapter starts with your work.</h1>
+      <p className="my-6 text-[var(--muted)]">Connect GitHub to build your candidate profile. Only public activity and your restricted contribution count are imported.</p>
+      {error && <p role="alert" className="mb-4 text-[var(--bad-fg)]">{error}</p>}
+      <a className="btn-primary" href="/talent/auth/github/start">Continue with GitHub</a>
+    </main>;
+  }
+  const profile = await profiles().mine(String(session.githubId));
+  return <TalentProfileEditor initial={profile} error={error} linkedinAvailable={Boolean(talentLinkedIn())} workEmailAvailable={workEmailConfigured()} importAvailable={profileImportConfigured()} />;
 }
+
