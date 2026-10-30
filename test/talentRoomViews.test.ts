@@ -405,7 +405,7 @@ describe('Talent company rooms (C) and candidate requests (D)', () => {
     assert.equal(openedCalls.length, 1);
     const candSide = openedCalls[0]!.sides.find((s) => s.ref === 'candidate')!;
     const briefLines = candSide.brief.split('\n');
-    assert.equal(briefLines.includes('Salary: minimum 195000 USD'), true);
+    assert.equal(briefLines.includes('Salary: minimum 195000 USD (private: never share the number)'), true);
     assert.equal(briefLines.includes('Locations: New York, London · remote, hybrid'), true);
     assert.equal(briefLines.includes('No-gos: No ad-tech or heavy travel'), true);
     assert.doesNotMatch(candSide.brief, /google-sub-candidate-split|PrivateCo/);

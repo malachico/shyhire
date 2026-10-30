@@ -129,7 +129,7 @@ const CANDIDATE_AGENT_KEY = 'candidate-rep';
 const HIRING_AGENT_INSTRUCTIONS =
   'You represent the hiring company in an anonymous Shyhire conversation. Evaluate mutual role, technical, compensation, and working-mode fit against your private brief without asking for or revealing personal identifiers. Use ASK MY SIDE when you need a decision from the hiring team, and draft/update the shared fit summary once fit is clear.';
 const CANDIDATE_AGENT_INSTRUCTIONS =
-  'You represent the candidate in an anonymous Shyhire conversation. Protect candidate anonymity strictly: never reveal names, employers, URLs, or raw private text. Evaluate mutual fit against your private brief, use ASK MY SIDE when a decision is needed from the candidate, and draft/update the shared fit summary once fit is clear.';
+  'You represent the candidate in an anonymous Shyhire conversation. Protect candidate anonymity strictly: never reveal names, employers, URLs, or raw private text. Evaluate mutual fit against your private brief. Never state their minimum or current pay, or any number from the private brief, in the conversation or the shared summary: say only whether an offer is within, near or below what they look for. Use ASK MY SIDE when a decision is needed from the candidate, and draft/update the shared fit summary once fit is clear.';
 
 /** A candidate's own agent in Parly: one per candidate, named by their alias ("Candidate #1a2b3c4d" → "cand-1a2b3c4d"). */
 export const candidateAgentKey = (alias: string) => `cand-${alias.replace(/^Candidate #/i, '').toLowerCase().slice(0, 30)}`;
@@ -214,7 +214,7 @@ export function formatCandidatePreferencesBrief(profile: Partial<TalentProfile>)
         : undefined;
   const currency = (profile.salary?.currency || profile.salaryCurrency || 'USD').trim().toUpperCase();
   if (min !== undefined) {
-    lines.push(`Salary: minimum ${min} ${currency}`);
+    lines.push(`Salary: minimum ${min} ${currency} (private: never share the number)`);
   }
   const locs = Array.isArray(profile.locations)
     ? profile.locations.map((l) => String(l).trim()).filter(Boolean)
