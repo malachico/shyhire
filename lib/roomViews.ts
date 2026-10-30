@@ -1,5 +1,6 @@
 import { FieldValue, type Firestore } from '@google-cloud/firestore';
 import { db } from './db.ts';
+import { redact } from './privacy.ts';
 import { parly, ParlyError, type Room, type RoomMessage, type RoomStatus, type SideInput } from './parly.ts';
 import { callerOf, domainBlocked, TalentError, text, verifiedDomains, type CvDetails, type TalentCaller, type TalentProfile } from './profiles.ts';
 
@@ -137,13 +138,15 @@ export const candidateAgentKey = (alias: string) => `cand-${alias.replace(/^Cand
 /** Everything the candidate's own agent knows: what companies see, then the private parts it never quotes. */
 export function candidateBrief(p: TalentProfile): string {
   const preferenceLines = formatCandidatePreferencesBrief(p);
+  // The agent can't repeat what it was never told: employers, links and emails are blanked before it sees them.
+  const clean = (s: string) => redact(s, [...p.experience.map((r) => r.company), ...p.employerDomains]);
   const roles = p.experience.filter((r) => !r.hidden).slice(0, 15)
-    .map((r) => `- ${r.title}${r.start || r.end ? ` (${r.start || '?'}–${r.end || 'Present'})` : ''}${r.description ? `: ${r.description.slice(0, 300)}` : ''}`);
+    .map((r) => `- ${clean(r.title)}${r.start || r.end ? ` (${r.start || '?'}–${r.end || 'Present'})` : ''}${r.description ? `: ${clean(r.description.slice(0, 300))}` : ''}`);
   return [
     p.publicSummary,
     details(p.details),
     roles.length ? `Self-reported roles (employer names withheld; never reveal names, employers or contact details):\n${roles.join('\n')}` : '',
-    p.openTo ? `Open to: ${p.openTo}` : '',
+    p.openTo ? `Open to: ${clean(p.openTo)}` : '',
     preferenceLines.length ? `Private candidate preferences (never quote raw text; use to evaluate fit and decide):\n${preferenceLines.join('\n')}` : '',
   ].filter(Boolean).join('\n\n').slice(0, 6000);
 }
@@ -331,7 +334,7 @@ export class TalentRoomViews {
   }
 
   /**
-   * A: Opens a room from a candidate search result with a private company brief (`role`, `comp`, `mustHaves`).
+   * Opens a room from a candidate search result with a private company brief (`role`, `comp`, `mustHaves`).
    * Calls `POST /v1/rooms` with opaque refs (`company` and `candidate`) and stores `talent_rooms/{parlyRoomId}`.
    */
   async openRoom(caller: TalentCaller, raw: unknown): Promise<{ id: string; status: RoomStatus }> {
@@ -429,7 +432,7 @@ export class TalentRoomViews {
   }
 
   /**
-   * B: Processes a signed Parly room webhook (`needs_decision`, `document_updated`, `agreed`, `stuck`, `closed`).
+   * Processes a signed Parly room webhook (`needs_decision`, `document_updated`, `agreed`, `stuck`, `closed`).
    * Idempotent on `event.id` (`lastEventId` / `seenEventIds`).
    */
   async handleWebhookEvent(raw: unknown): Promise<{ ok: true; duplicate?: boolean; ignored?: boolean }> {
@@ -527,7 +530,6 @@ export class TalentRoomViews {
     return { id: snap.id, viewerSide, record: data };
   }
 
-  /** C: Company rooms list (`companyId == me` ordered by `updatedAt desc`). Never exposes `candidateId` or candidate-side decision details. */
   /** Both sides' rooms in one list (the person may hire and look for work): waiting on them first, then newest. */
   async listConversations(caller: TalentCaller): Promise<ConversationRow[]> {
     const [hiring, offers] = await Promise.all([this.listCompanyRooms(caller), this.listCandidateRequests(caller)]);
@@ -543,6 +545,7 @@ export class TalentRoomViews {
     return (await this.listConversations(caller)).filter((r) => r.needsMe).length;
   }
 
+  /** Company rooms (`companyId == me`, newest first). Never exposes `candidateId` or candidate-side decision details. */
   async listCompanyRooms(caller: TalentCaller): Promise<CompanyRoomSummary[]> {
     const { id: personId } = callerOf(caller, 'Sign in as a person to view rooms');
     const snap = await this.col.where('companyId', '==', personId).orderBy('updatedAt', 'desc').limit(100).get();
@@ -570,7 +573,7 @@ export class TalentRoomViews {
     });
   }
 
-  /** D: Candidate requests list (`candidateId == me` ordered by `updatedAt desc`). Never exposes `brief`, `companyId`, or company-side decision details. */
+  /** Candidate requests list (`candidateId == me` ordered by `updatedAt desc`). Never exposes `brief`, `companyId`, or company-side decision details. */
   async listCandidateRequests(caller: TalentCaller): Promise<CandidateRequestSummary[]> {
     const { id: personId } = callerOf(caller, 'Sign in as a person to view requests');
     const snap = await this.col.where('candidateId', '==', personId).orderBy('updatedAt', 'desc').limit(100).get();
@@ -734,4 +737,3 @@ let cachedRoomViews: TalentRoomViews | undefined;
 export function roomViews(): TalentRoomViews {
   return (cachedRoomViews ??= new TalentRoomViews());
 }
-

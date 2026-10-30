@@ -117,4 +117,3 @@ export async function githubAccount(code: string, verifier: string): Promise<Git
   });
   return gh.exchange(code, verifier);
 }
-

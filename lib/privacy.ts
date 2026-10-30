@@ -1,3 +1,17 @@
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The text with employers (names or domains), links and email addresses blanked: what an agent may be told about someone. */
+export function redact(text: string, employers: string[]): string {
+  let out = text.replace(/https?:\/\/\S+|www\.\S+/gi, '[link]').replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]');
+  for (const raw of employers) {
+    const e = raw.trim();
+    if (e.length < 2) continue;
+    const word = /\./.test(e) ? e.split('.')[0]! : '';
+    for (const term of [e, ...(word.length >= 4 ? [word] : [])]) out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escape(term)}(?![\\p{L}\\p{N}])`, 'giu'), '[employer]');
+  }
+  return out;
+}
+
 /** What in the candidate's own text could identify them: their name, email, a link, or a blocked employer. */
 export function privacyLeaks(text: string, me: { name: string; email: string }, blocked: string[]): string[] {
   const t = text.toLowerCase();

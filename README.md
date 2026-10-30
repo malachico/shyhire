@@ -1,43 +1,62 @@
-# Shyhire (Parly Talent)
+# Shyhire
 
-A hiring app built on Parly. Candidates and companies sign in here (Google); Parly is only the
-platform underneath: Talent's server opens rooms over Parly's Apps API, where two hosted agents
-check the fit for their sides. Parly never learns who the people are: it sees an opaque side
-`ref` and a brief, nothing else.
+Anonymous hiring at [shyhire.com](https://shyhire.com). Each candidate and each company is represented by an AI
+agent; the agents talk first in a shared room and check the fit. People only step in to answer a question or say
+yes, and names are shared only after both sides say yes.
 
-## How it talks to Parly
+Shyhire is built on [Parly](https://parly.dev) and is a working example of its Apps API (`/v1`): agents, agent
+search and rooms. Parly never learns who the people are: it sees an anonymous alias, opaque side refs and briefs.
 
-- `lib/parly.ts`: server-only client for `/v1` with the app's API key (`Authorization: Bearer pk_live_…`):
-  agent templates, opening rooms, room status, each side's messages, decisions, approvals, closing.
-  The browser never calls Parly.
-- `app/api/parly/webhook/route.ts`: Parly's room events (`room.needs_decision`, `room.document_updated`,
-  `room.agreed`, `room.stuck`, `room.closed`). `lib/webhooks.ts` checks the `Parly-Signature` header
-  (HMAC-SHA256 over `"<t>.<raw body>"`, refused after 5 minutes). For now the route only logs.
+## How it works
 
-## Sign-in
+- **Candidates** sign in with Google, import a CV (PDF or text) or write a profile, and choose which facts
+  companies see. They can connect GitHub, LinkedIn and a work email for verified facts. Their minimum pay,
+  no-gos and blocked companies stay private to their own agent.
+- **Companies** sign in with Google, verify a work email, and open a role. The role's agent searches candidates'
+  agents, opens a conversation with each strong fit, and keeps a few more going each day.
+- **In a room**, the two agents talk, ask their side when they need a decision, and write a shared summary.
+  When both sides approve it, each sees the other's contact details.
 
-Google OAuth 2.0 with state and PKCE; the Google token is used once to read OpenID userinfo (`sub`, `email`, `name`) and never stored. The session is a signed, HttpOnly, host-only cookie holding the Google `sub` (which serves as the person's id in Talent).
-Callback: `<APP_URL>/talent/auth/google/callback` (registered on the Google OAuth client as `https://parly-talent.vercel.app/talent/auth/google/callback`).
+## Privacy
 
-## Environment
+- The CV file or pasted text is sent once to Gemini to draft the profile and never stored.
+- What companies see is checked for the person's name, email, links and employers before it is saved
+  (`lib/privacy.ts`, `Profiles.save`).
+- The candidate's agent is never told employer names, links or email addresses: they are blanked out of its
+  brief (`redact`, `candidateBrief`). It knows the minimum pay but is instructed never to state it.
+- Companies on a candidate's employer or blocked domains never find them or reach them.
+- GitHub and LinkedIn access tokens are used once and not kept.
 
-See `.env.example`: `APP_URL`, `SESSION_SECRET` (32+ chars), `TALENT_GOOGLE_CLIENT_ID`, `TALENT_GOOGLE_CLIENT_SECRET`, `TALENT_GITHUB_CLIENT_ID`, `TALENT_GITHUB_CLIENT_SECRET`, `TALENT_LINKEDIN_CLIENT_ID`, `TALENT_LINKEDIN_CLIENT_SECRET`, `PARLY_API_URL`, `PARLY_API_KEY`, `PARLY_WEBHOOK_SECRET`.
+See [shyhire.com/privacy](https://shyhire.com/privacy) for what is stored.
 
-## Develop
+## Code map
+
+- `lib/parly.ts`: server-only client for Parly's `/v1` API with the app key. The browser never calls Parly.
+- `lib/profiles.ts`: profiles, CV import and AI-written facts (Vertex AI, metered per person), candidate search.
+- `lib/roomViews.ts`: opening rooms, each candidate's own agent (`syncCandidate`), conversation lists and room
+  views (the viewer's side always comes from the stored room, never the client), decisions, approvals, reveal.
+- `lib/roles.ts` and `app/api/cron/roles`: standing roles; a daily Vercel Cron opens new conversations.
+- `app/api/parly/webhook`: Parly's signed room events (`lib/webhooks.ts` checks `Parly-Signature`), stored
+  idempotently.
+- `lib/google.ts`, `lib/github.ts`, `lib/linkedin.ts`, `lib/workEmail.ts`: Google sign-in (OpenID Connect ID
+  token, no client secret), GitHub and LinkedIn connections, and work-email codes.
+- `lib/session.ts`, `lib/auth.ts`: a signed, HttpOnly, host-only session cookie holding the Google `sub`.
+- `lib/db.ts`: Firestore. In production it authenticates with Vercel OIDC and GCP Workload Identity Federation;
+  locally and in tests it uses the emulator.
+
+## Run it
 
 ```
+cp .env.example .env.local   # fill in what you need; see the comments there
 npm install
-npm run dev        # http://localhost:3100
-npm test           # session, webhook, profile, work-email, connection and search checks
-npm run build
+gcloud emulators firestore start --host-port=127.0.0.1:8085 &
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 npm run dev    # http://localhost:3100
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 npm test
+npm run typecheck && npm run build
 ```
 
-## Database & Profiles
-
-- `lib/db.ts`: Firestore in Talent's own GCP project (`parly-talent-0a7c87`). On Vercel production it authenticates via Vercel OIDC + GCP Workload Identity Federation (`@vercel/oidc` + `ExternalAccountClient`); locally and in tests it uses `FIRESTORE_EMULATOR_HOST`.
-- `lib/profiles.ts`: candidate profiles, professional-only normalization (`professionalDraft`, `publicSummary`), transient CV/PDF draft extraction, and anonymous candidate search (`search`).
-- `lib/roomViews.ts`: company rooms (`/talent/rooms`, `/talent/rooms/[id]`) and candidate requests (`/talent/requests`, `/talent/requests/[id]`), deriving the viewer's side (`company` or `candidate`) server-side from `talent_rooms/{parlyRoomId}` before loading live room messages/documents or calling `parly.decide` and `parly.approve`.
-- `lib/github.ts`, `lib/workEmail.ts`, `lib/linkedin.ts`: GitHub public activity extraction, private one-time code work-email verification, and direct LinkedIn OpenID Connect account connection.
+Sign-in needs a Google OAuth client with `<APP_URL>/talent/auth/google/callback` as a redirect URI. Rooms and
+agents need a Parly app key (`PARLY_API_KEY`) and its webhook secret.
 
 ## License
 

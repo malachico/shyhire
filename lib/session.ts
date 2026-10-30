@@ -43,4 +43,3 @@ export function verifySession(value: string | undefined, secret: string, now = D
 }
 
 export const SESSION_MAX_AGE_S = MAX_AGE_S;
-

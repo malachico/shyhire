@@ -24,4 +24,3 @@ export async function GET() {
   });
   return NextResponse.redirect(linkedinClient().authorizeUrl(state));
 }
-

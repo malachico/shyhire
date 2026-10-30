@@ -69,7 +69,7 @@ export class TalentGoogle {
 }
 
 export function googleClientId(): string | undefined {
-  return process.env.TALENT_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || undefined;
+  return process.env.TALENT_GOOGLE_CLIENT_ID || undefined;
 }
 
 export function googleConfigured(): boolean {

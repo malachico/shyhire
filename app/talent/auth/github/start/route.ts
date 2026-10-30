@@ -32,4 +32,3 @@ export async function GET() {
   });
   return NextResponse.redirect(`https://github.com/login/oauth/authorize?${query}`);
 }
-

@@ -56,15 +56,13 @@ export function profiles(): Profiles {
 }
 
 export function workEmailConfigured(): boolean {
-  return Boolean((process.env.SMTP_USER ?? process.env.GMAIL_USER) && (process.env.SMTP_APP_PASSWORD ?? process.env.GMAIL_APP_PASSWORD));
+  return Boolean(process.env.SMTP_USER && process.env.SMTP_APP_PASSWORD);
 }
 
 export function workEmail(): WorkEmailVerification {
   return new WorkEmailVerification(
     db(),
     profiles(),
-    noticeMailer(process.env.SMTP_USER ?? process.env.GMAIL_USER, process.env.SMTP_APP_PASSWORD ?? process.env.GMAIL_APP_PASSWORD),
+    noticeMailer(process.env.SMTP_USER, process.env.SMTP_APP_PASSWORD),
   );
 }
-
-

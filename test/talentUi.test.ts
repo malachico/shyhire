@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { privacyLeaks } from '../lib/privacy.ts';
+import { privacyLeaks, redact } from '../lib/privacy.ts';
+import { normalizeProfile } from '../lib/profiles.ts';
+import { candidateBrief } from '../lib/roomViews.ts';
 import { testDb } from '../lib/db.ts';
 import { homeOf, parseMode } from '../lib/modes.ts';
 import { Profiles } from '../lib/profiles.ts';
@@ -80,6 +82,17 @@ describe('Shyhire UI support', () => {
     assert.deepEqual(privacyLeaks('Backend engineer, Go', me, ['acme.com']), []);
     assert.deepEqual(privacyLeaks('I am Dana, see https://x.dev or mail dana@gmail.com. Built Acme payments.', me, ['acme.com']), ['your name', 'an email address', 'a link', 'acme.com']);
     assert.deepEqual(privacyLeaks('a great team', me, ['a.io']), [], 'short domain words are not matched alone');
+  });
+
+  it("the candidate's agent is never told their employers, links or emails", () => {
+    assert.equal(redact('Led payments at Acme Corp (acme.com), see https://x.dev or dana@acme.com', ['Acme Corp', 'acme.com']), 'Led payments at [employer] ([employer]), see [link] or [email]');
+    assert.equal(redact('Academic work', ['acme.com']), 'Academic work', 'only whole words');
+    const brief = candidateBrief(normalizeProfile('p1', {
+      experience: [{ id: 'r1', title: 'Senior engineer at Globex', company: 'Globex', start: '2020', end: '', description: 'Built Globex billing; blog at https://dana.dev', hidden: false, source: 'self' }],
+      openTo: 'Remote, not Initech', employerDomains: ['initech.com'], salary: { min: 200000, currency: 'USD' },
+    }));
+    assert.doesNotMatch(brief, /Globex|Initech|dana\.dev/);
+    assert.match(brief, /Senior engineer at \[employer\]/);
   });
 
   it('sign-in mode is only work or hire, and each has a fixed home', () => {

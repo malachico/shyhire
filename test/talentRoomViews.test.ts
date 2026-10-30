@@ -411,6 +411,3 @@ describe('Talent company rooms (C) and candidate requests (D)', () => {
     assert.doesNotMatch(candSide.brief, /google-sub-candidate-split|PrivateCo/);
   });
 });
-
-
-

@@ -68,4 +68,3 @@ describe('Talent anonymous candidate search', () => {
     assert.deepEqual((await profiles.search(caller.id, 'Python')).profiles, []);
   });
 });
-

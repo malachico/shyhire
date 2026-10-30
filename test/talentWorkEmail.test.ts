@@ -119,4 +119,3 @@ describe('Talent work email', () => {
     assert.equal((await profiles.mine(person)).version, 0);
   });
 });
-
