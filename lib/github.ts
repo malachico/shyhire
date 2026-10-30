@@ -54,7 +54,7 @@ export class TalentGitHub {
     });
     const auth = (await response.json().catch(() => ({}))) as { access_token?: string; error?: string };
     if (!response.ok || !auth.access_token || auth.error) throw new TalentError('unauthorized', 'GitHub sign-in failed. Start again.');
-    const headers = { authorization: `Bearer ${auth.access_token}`, accept: 'application/vnd.github+json', 'user-agent': 'parly-talent' };
+    const headers = { authorization: `Bearer ${auth.access_token}`, accept: 'application/vnd.github+json', 'user-agent': 'shyhire' };
     const get = async (url: string, init?: RequestInit): Promise<Record<string, any>> => {
       const res = await this.fetchImpl(url, { ...init, headers: { ...headers, ...init?.headers }, signal: AbortSignal.timeout(15_000), redirect: 'error' });
       if (!res.ok) throw new TalentError('unavailable', 'GitHub could not verify your profile. Try again.');

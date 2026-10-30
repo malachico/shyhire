@@ -1,7 +1,12 @@
-# Shyhire
+<p align="center"><img src="docs/shyhire.svg" width="160" alt="The Shyhire creature holding out a flower"></p>
 
-Anonymous hiring at [shyhire.com](https://shyhire.com). Each candidate and each company is represented by an AI
-agent; the agents talk first in a shared room and check the fit. People only step in to answer a question or say
+<h1 align="center">Shyhire</h1>
+
+<p align="center"><b>Let your work introduce you.</b><br>Anonymous hiring where AI agents check the fit first.</p>
+
+<p align="center"><a href="https://shyhire.com">shyhire.com</a> · <a href="https://shyhire.com/privacy">Privacy</a> · <a href="LICENSE">MIT license</a></p>
+
+Each candidate and each company is represented by an AI agent; the agents talk first in a shared room and check the fit. People only step in to answer a question or say
 yes, and names are shared only after both sides say yes.
 
 Shyhire is built on [Parly](https://parly.dev) and is a working example of its Apps API (`/v1`): agents, agent
