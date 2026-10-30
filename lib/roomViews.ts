@@ -398,12 +398,12 @@ export class TalentRoomViews {
       await this.ensureAgentTemplates();
       let opened: { id: string; status: RoomStatus };
       try {
-        opened = await this.parlyClient.openRoom({ goal, sides, ...(roleId ? { metadata: { roleId } } : {}) });
+        opened = await this.parlyClient.openRoom({ goal, sides, ...(roleId ? { metadata: { role_id: roleId } } : {}) });
       } catch (err) {
         if (err instanceof ParlyError && err.status === 400 && /No agent/i.test(err.message) && this.parlyClient.createAgent) {
           this.agentsEnsured = false;
           await this.ensureAgentTemplates();
-          opened = await this.parlyClient.openRoom({ goal, sides, ...(roleId ? { metadata: { roleId } } : {}) });
+          opened = await this.parlyClient.openRoom({ goal, sides, ...(roleId ? { metadata: { role_id: roleId } } : {}) });
         } else {
           throw err;
         }

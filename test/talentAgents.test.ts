@@ -41,7 +41,7 @@ describe("Candidates' own Parly agents", () => {
     const side = opened[0]!.sides.find((s) => s.ref === 'candidate')!;
     assert.equal(side.agent, candidateAgentKey(saved.alias));
     assert.equal(side.brief, '');
-    assert.deepEqual(opened[0]!.metadata, { roleId });
+    assert.deepEqual(opened[0]!.metadata, { role_id: roleId });
     assert.equal((await db.collection('talent_rooms').doc('room-1').get()).data()!.roleId, roleId);
   });
 
@@ -73,7 +73,7 @@ describe('Standing roles', () => {
     await assert.rejects(roles.create({ id: 'r-a', kind: 'human' }, { title: 'Go', looking: 'Go' }), /Verify your work email/);
     const { role, opened: first } = await roles.create(co, { title: 'Senior Go engineer', looking: 'Payments, remote EU', comp: '$190k' });
     assert.equal(first, 2);
-    assert.deepEqual(opened.map((o) => o.metadata?.roleId), [role.id, role.id]);
+    assert.deepEqual(opened.map((o) => o.metadata?.role_id), [role.id, role.id]);
     scores = [90, 90, 90];
     assert.equal(await roles.fill(role.id, 3), 1); // only the one not contacted yet
     assert.equal(await roles.fill(role.id, 3), 0);
