@@ -1,3 +1,9 @@
+# Working on Shyhire
+
+- Tests need the Firestore emulator: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 npm test`. Also `npm run typecheck` and `npm run build`.
+- Candidate privacy comes first: nothing a company sees (facts, cards, agent briefs, room text) may carry a name, employer, link, email or pay number. See `lib/privacy.ts`.
+- A room's side always comes from the stored room, never from the browser.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know

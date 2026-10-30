@@ -41,4 +41,3 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${base}/talent/profile?error=${encodeURIComponent(msg)}`);
   }
 }
-

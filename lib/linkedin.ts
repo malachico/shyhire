@@ -146,4 +146,3 @@ export function linkedinClient(): TalentLinkedIn {
 export async function linkedinAccount(code: string): Promise<LinkedInIdentity> {
   return linkedinClient().exchange(code);
 }
-

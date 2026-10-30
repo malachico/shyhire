@@ -285,4 +285,3 @@ describe('Talent LinkedIn OpenID Connect account connection', () => {
     );
   });
 });
-

@@ -31,6 +31,7 @@ export interface RoleView extends Role {
 export const FIRST_FILL = 10, DAILY_FILL = 3;
 /** Only candidates the search scores at least this (0-100) get contacted. */
 export const MIN_FIT = 60;
+// A little under a day, so the daily cron never skips a role that was filled a few minutes later yesterday.
 const DAY_MS = 20 * 60 * 60 * 1000;
 
 export class Roles {
@@ -107,6 +108,7 @@ export class Roles {
   async setStatus(caller: TalentCaller, roleId: string, status: unknown): Promise<void> {
     const { id } = callerOf(caller);
     if (status !== 'open' && status !== 'paused' && status !== 'closed') throw new TalentError('invalid', 'Status is open, paused or closed');
+    if (typeof roleId !== 'string' || !/^[a-f0-9-]{36}$/.test(roleId)) throw new TalentError('not_found', 'No such role');
     const ref = this.col.doc(roleId);
     const role = (await ref.get()).data() as Role | undefined;
     if (!role || role.companyId !== id) throw new TalentError('not_found', 'No such role');

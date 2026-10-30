@@ -106,4 +106,3 @@ export class WorkEmailVerification {
     return { verified: true };
   }
 }
-

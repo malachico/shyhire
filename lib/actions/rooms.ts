@@ -16,8 +16,8 @@ export async function openTalentRoom(
 ): Promise<{ id: string; status: string; error?: never } | { error: string; id?: never }> {
   try {
     const res = await roomViews().openRoom(await requirePersonId(), { candidateAlias, brief });
-    revalidatePath('/talent/rooms');
-    revalidatePath('/talent/requests');
+    revalidatePath('/talent/conversations');
+    revalidatePath('/talent/search');
     return res;
   } catch (error) {
     if (error instanceof TalentError) return { error: error.message };
@@ -31,10 +31,8 @@ export async function decideTalentRoom(
 ): Promise<{ ok: true; error?: never } | { error: string; ok?: never }> {
   try {
     const res = await roomViews().decide(await requirePersonId(), roomId, choice);
-    revalidatePath('/talent/rooms');
-    revalidatePath('/talent/requests');
-    revalidatePath(`/talent/rooms/${roomId}`);
-    revalidatePath(`/talent/requests/${roomId}`);
+    revalidatePath('/talent/conversations');
+    revalidatePath(`/talent/conversations/${roomId}`);
     return res;
   } catch (error) {
     if (error instanceof TalentError) return { error: error.message };
@@ -48,10 +46,8 @@ export async function approveTalentRoom(
 ): Promise<{ ok: true; agreed: boolean; error?: never } | { error: string; ok?: never }> {
   try {
     const res = await roomViews().approve(await requirePersonId(), roomId, version);
-    revalidatePath('/talent/rooms');
-    revalidatePath('/talent/requests');
-    revalidatePath(`/talent/rooms/${roomId}`);
-    revalidatePath(`/talent/requests/${roomId}`);
+    revalidatePath('/talent/conversations');
+    revalidatePath(`/talent/conversations/${roomId}`);
     return res;
   } catch (error) {
     if (error instanceof TalentError) return { error: error.message };

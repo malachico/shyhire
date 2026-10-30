@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 120 120" role="img" aria-label="The Shyhire creature holding out a flower">
+  <rect width="120" height="120" rx="26" fill="#FBF8F3"/>
+  <path d="M30 116 V60 C30 30 48 12 68 12 C88 12 106 30 106 60 V116 Z" fill="#141414"/>
+  <circle cx="56" cy="62" r="12.5" fill="#fff"/><circle cx="84" cy="62" r="12.5" fill="#fff"/>
+  <circle cx="52.5" cy="60" r="6.2" fill="#141414"/><circle cx="80.5" cy="60" r="6.2" fill="#141414"/>
+  <path d="M31 92 Q22 90 17 82" fill="none" stroke="#141414" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M17 82 L13 72" fill="none" stroke="#3F7D3A" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="13" cy="61.5" r="4.3" fill="#F5B700"/><circle cx="18.3" cy="65.4" r="4.3" fill="#F5B700"/>
+  <circle cx="16.3" cy="71.6" r="4.3" fill="#F5B700"/><circle cx="9.7" cy="71.6" r="4.3" fill="#F5B700"/>
+  <circle cx="7.7" cy="65.4" r="4.3" fill="#F5B700"/><circle cx="13" cy="67" r="2.8" fill="#E0761A"/>
+</svg>

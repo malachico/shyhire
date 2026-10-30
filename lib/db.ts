@@ -50,7 +50,7 @@ export function createFirestore(): Firestore {
   if (process.env.FIRESTORE_EMULATOR_HOST) {
     process.env.METADATA_SERVER_DETECTION ??= 'none';
     return new Firestore({
-      projectId: process.env.GCP_PROJECT_ID || 'parly-talent-local',
+      projectId: process.env.GCP_PROJECT_ID || 'shyhire-local',
       ignoreUndefinedProperties: true,
     });
   }

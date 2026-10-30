@@ -154,11 +154,11 @@ describe('Google Talent sign-in & GitHub/LinkedIn connections', () => {
       return claims;
     };
     const ok = { sub: 'google-sub-998877', email: 'Alice@Example.com', email_verified: true, name: 'Alice Example', nonce };
-    const google = new TalentGoogle({ clientId: 'g-client', webUrl: 'https://parly-talent.vercel.app' }, verify(ok));
+    const google = new TalentGoogle({ clientId: 'g-client', webUrl: 'https://shyhire.com' }, verify(ok));
     const authUrl = new URL(google.authorizeUrl('state-123', nonce));
     assert.equal(authUrl.origin, 'https://accounts.google.com');
     assert.equal(authUrl.searchParams.get('client_id'), 'g-client');
-    assert.equal(authUrl.searchParams.get('redirect_uri'), `https://parly-talent.vercel.app${GOOGLE_CALLBACK_PATH}`);
+    assert.equal(authUrl.searchParams.get('redirect_uri'), `https://shyhire.com${GOOGLE_CALLBACK_PATH}`);
     assert.equal(authUrl.searchParams.get('response_type'), 'id_token');
     assert.equal(authUrl.searchParams.get('response_mode'), 'form_post');
     assert.equal(authUrl.searchParams.get('nonce'), nonce);
@@ -167,7 +167,7 @@ describe('Google Talent sign-in & GitHub/LinkedIn connections', () => {
     assert.deepEqual(await google.identity('id.token.jwt', nonce), { sub: 'google-sub-998877', email: 'alice@example.com', name: 'Alice Example' });
     assert.deepEqual(seen[0], ['id.token.jwt', 'g-client'], 'the token is verified with our client ID as the audience');
 
-    const web = { clientId: 'g-client', webUrl: 'https://parly-talent.vercel.app' };
+    const web = { clientId: 'g-client', webUrl: 'https://shyhire.com' };
     await assert.rejects(new TalentGoogle(web, verify({ ...ok, nonce: 'x'.repeat(32) })).identity('t', nonce), /failed/, 'another sign-in\'s token (replay)');
     await assert.rejects(new TalentGoogle(web, verify({ ...ok, email_verified: false })).identity('t', nonce), /unverified|invalid/);
     await assert.rejects(new TalentGoogle(web, verify(new Error('bad signature'))).identity('t', nonce), /failed/);

@@ -96,6 +96,7 @@ export class TalentError extends Error {
 
 export const wire = { newId: (): string => randomUUID() };
 
+// ponytail: in memory, so per server instance; move to Firestore if abuse gets past the per-person AI budget.
 export class RateLimiter {
   private readonly hits = new Map<string, number[]>();
   private readonly max: number;
@@ -697,8 +698,3 @@ export class Profiles {
     else await ref.set(payload, { merge: true });
   }
 }
-
-
-
-
-
