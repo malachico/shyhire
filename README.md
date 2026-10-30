@@ -1,6 +1,6 @@
 # Shyhire (Parly Talent)
 
-A hiring app built on Parly. Candidates and companies sign in here (GitHub); Parly is only the
+A hiring app built on Parly. Candidates and companies sign in here (Google); Parly is only the
 platform underneath: Talent's server opens rooms over Parly's Apps API, where two hosted agents
 check the fit for their sides. Parly never learns who the people are: it sees an opaque side
 `ref` and a brief, nothing else.
@@ -39,3 +39,6 @@ npm run build
 - `lib/roomViews.ts`: company rooms (`/talent/rooms`, `/talent/rooms/[id]`) and candidate requests (`/talent/requests`, `/talent/requests/[id]`), deriving the viewer's side (`company` or `candidate`) server-side from `talent_rooms/{parlyRoomId}` before loading live room messages/documents or calling `parly.decide` and `parly.approve`.
 - `lib/github.ts`, `lib/workEmail.ts`, `lib/linkedin.ts`: GitHub public activity extraction, private one-time code work-email verification, and direct LinkedIn OpenID Connect account connection.
 
+## License
+
+MIT, see [LICENSE](LICENSE). The Shyhire name and logo are not covered by the license.

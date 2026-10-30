@@ -1,6 +1,7 @@
 {
   "name": "parly-talent",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "next dev --port 3100",
