@@ -26,6 +26,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
         <Arrow color="var(--ink)" />
       </a>
     </div>
-    <p className="muted mt-auto text-center text-[13px]">Both continue with Google</p>
+    <p className="muted mt-auto text-center text-[13px]">Both continue with Google. By continuing you agree to the <a href="/terms" className="underline">Terms</a> and <a href="/privacy" className="underline">Privacy policy</a>.</p>
   </main>;
 }
