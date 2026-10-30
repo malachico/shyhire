@@ -1,7 +1,7 @@
 import { AppIcon, Wordmark } from '@/components/Brand';
 
 export const COMPANY = 'MALACHI, a company registered in Israel';
-export const CONTACT = 'privacy@shyhire.com';
+export const CONTACT = 'malachi@madgic.ai';
 export const UPDATED = '30 October 2026';
 
 /** The shell for the privacy and terms pages: a plain readable column. */
