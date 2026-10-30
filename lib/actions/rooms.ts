@@ -17,6 +17,7 @@ export async function openTalentRoom(
   try {
     const res = await roomViews().openRoom(await requirePersonId(), { candidateAlias, brief });
     revalidatePath('/talent/conversations');
+    revalidatePath('/talent/search');
     return res;
   } catch (error) {
     if (error instanceof TalentError) return { error: error.message };
