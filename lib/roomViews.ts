@@ -137,14 +137,14 @@ export const candidateAgentKey = (alias: string) => `cand-${alias.replace(/^Cand
 
 /** Everything the candidate's own agent knows: what companies see, then the private parts it never quotes. */
 export function candidateBrief(p: TalentProfile): string {
-  const preferenceLines = formatCandidatePreferencesBrief(p);
   // The agent can't repeat what it was never told: employers, links and emails are blanked before it sees them.
   const clean = (s: string) => redact(s, [...p.experience.map((r) => r.company), ...p.employerDomains]);
+  const preferenceLines = formatCandidatePreferencesBrief(p).map(clean);
   const roles = p.experience.filter((r) => !r.hidden).slice(0, 15)
     .map((r) => `- ${clean(r.title)}${r.start || r.end ? ` (${r.start || '?'}–${r.end || 'Present'})` : ''}${r.description ? `: ${clean(r.description.slice(0, 300))}` : ''}`);
   return [
     p.publicSummary,
-    details(p.details),
+    clean(details(p.details)),
     roles.length ? `Self-reported roles (employer names withheld; never reveal names, employers or contact details):\n${roles.join('\n')}` : '',
     p.openTo ? `Open to: ${clean(p.openTo)}` : '',
     preferenceLines.length ? `Private candidate preferences (never quote raw text; use to evaluate fit and decide):\n${preferenceLines.join('\n')}` : '',

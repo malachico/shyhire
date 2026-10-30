@@ -90,8 +90,9 @@ describe('Shyhire UI support', () => {
     const brief = candidateBrief(normalizeProfile('p1', {
       experience: [{ id: 'r1', title: 'Senior engineer at Globex', company: 'Globex', start: '2020', end: '', description: 'Built Globex billing; blog at https://dana.dev', hidden: false, source: 'self' }],
       openTo: 'Remote, not Initech', employerDomains: ['initech.com'], salary: { min: 200000, currency: 'USD' },
+      noGos: 'No calls from globex.com, email me at dana@x.io', details: { industries: [], skills: [], languages: [], certifications: [], leadership: 'Led 8 engineers at Globex' },
     }));
-    assert.doesNotMatch(brief, /Globex|Initech|dana\.dev/);
+    assert.doesNotMatch(brief, /Globex|globex|Initech|dana\.dev|dana@x\.io/);
     assert.match(brief, /Senior engineer at \[employer\]/);
   });
 
