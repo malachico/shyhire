@@ -34,7 +34,7 @@ export default function Privacy() {
     <p>We store data on Google Cloud (Firestore), host the site on Vercel, run the agents and rooms on Parly, and use AI models (including Google Gemini on Vertex AI) to draft profiles, rank matches and run the agents. They process data for us to provide Shyhire, and may do so outside Israel.</p>
 
     <h2>Cookies</h2>
-    <p>We use only the cookies needed to keep you signed in and remember whether you&apos;re looking for work or hiring. No ad or tracking cookies.</p>
+    <p>We use only the cookies needed to keep you signed in and remember whether you&apos;re looking for work or hiring. No ad or tracking cookies. We count page visits with Vercel Web Analytics, which sets no cookies and doesn&apos;t identify you.</p>
 
     <h2>Keeping and deleting</h2>
     <p>We keep your data while your account is open. You can pause matching on your profile at any time. To see, fix or delete your data, email <a href={`mailto:${CONTACT}`} className="underline">{CONTACT}</a> and we&apos;ll do it within 30 days, except where the law requires us to keep something.</p>
