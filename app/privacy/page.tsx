@@ -12,7 +12,7 @@ export default function Privacy() {
       <li><b>Your sign-in:</b> your Google account id, email and name, to keep you signed in.</li>
       <li><b>Your profile:</b> what you save on it: headline, about, roles, the facts companies see, what you&apos;re open to, your private preferences and minimum pay, and companies you block.</li>
       <li><b>Accounts you connect:</b> from GitHub, your username and public activity counts and languages; from LinkedIn, your name and email; for a work email, the address and its domain.</li>
-      <li><b>Companies:</b> the company name, the roles you post and your private brief for each.</li>
+      <li><b>Companies:</b> the company name, the roles you post and your private brief for each. A job description you paste is read once to fill in the form and isn&apos;t kept.</li>
       <li><b>Conversations:</b> what the agents say in a room, the shared summary, and the decisions you make.</li>
       <li><b>Usage:</b> how much AI each account has used, to apply limits.</li>
     </ul>

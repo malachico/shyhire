@@ -2,7 +2,7 @@ import { FieldValue, type Firestore } from '@google-cloud/firestore';
 import { db } from './db.ts';
 import { redact } from './privacy.ts';
 import { parly, ParlyError, type Room, type RoomMessage, type RoomStatus, type SideInput } from './parly.ts';
-import { callerOf, domainBlocked, TalentError, text, verifiedDomains, type CvDetails, type TalentCaller, type TalentProfile } from './profiles.ts';
+import { callerOf, domainBlocked, parseWorkModes, TalentError, text, verifiedDomains, type CvDetails, type TalentCaller, type TalentProfile, type WorkMode } from './profiles.ts';
 
 export type RoomSideKind = 'company' | 'candidate';
 
@@ -10,6 +10,8 @@ export interface TalentRoomBrief {
   role: string;
   comp: string;
   mustHaves: string;
+  location?: string;
+  workModes?: WorkMode[];
 }
 
 export interface TalentRoomDecision {
@@ -190,6 +192,8 @@ function normalizeBrief(raw: unknown): TalentRoomBrief {
     role: typeof obj.role === 'string' ? obj.role : '',
     comp: typeof obj.comp === 'string' ? obj.comp : '',
     mustHaves: typeof obj.mustHaves === 'string' ? obj.mustHaves : '',
+    ...(typeof obj.location === 'string' && obj.location ? { location: obj.location } : {}),
+    ...(Array.isArray(obj.workModes) && obj.workModes.length ? { workModes: obj.workModes as WorkMode[] } : {}),
   };
 }
 
@@ -367,7 +371,10 @@ export class TalentRoomViews {
     const role = text(rawBrief.role ?? '', 200, 'role');
     if (!role) throw new TalentError('invalid', 'Enter the role title');
     const comp = text(rawBrief.comp ?? '', 200, 'comp');
-    const mustHaves = text(rawBrief.mustHaves ?? '', 2000, 'mustHaves');
+    // A role's brief is its 2000-character description and its 2000-character notes.
+    const mustHaves = text(rawBrief.mustHaves ?? '', 4001, 'mustHaves');
+    const location = text(rawBrief.location ?? '', 200, 'location');
+    const workModes = parseWorkModes(rawBrief.workModes ?? []);
 
     const companyProfile = (await this.store.collection('profiles').doc(companyId).get()).data() as TalentProfile | undefined;
     const companyDomains = verifiedDomains(companyProfile?.verified ?? []);
@@ -392,6 +399,8 @@ export class TalentRoomViews {
 
     const companyBriefText = redact([
       `Role: ${role}`,
+      location ? `Location: ${location}` : '',
+      workModes.length ? `Work mode: ${workModes.join(', ')}` : '',
       comp ? `Compensation band: ${comp}` : '',
       mustHaves ? `Must-haves and private notes: ${mustHaves}` : '',
     ]
@@ -432,7 +441,7 @@ export class TalentRoomViews {
         companyName,
         candidateId: candidateDoc.id,
         candidateAlias: candidateProfile.alias,
-        brief: { role, comp, mustHaves },
+        brief: { role, comp, mustHaves, ...(location ? { location } : {}), ...(workModes.length ? { workModes } : {}) },
         ...(roleId ? { roleId } : {}),
         status,
         createdAt: now,

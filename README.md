@@ -17,7 +17,7 @@ search and rooms. Parly never learns who the people are: it sees an anonymous al
 - **Candidates** sign in with Google, import a CV (PDF or text) or write a profile, and choose which facts
   companies see. They can connect GitHub, LinkedIn and a work email for verified facts. Their minimum pay,
   no-gos and blocked companies stay private to their own agent.
-- **Companies** sign in with Google, verify a work email, and open a role. The role's agent searches candidates'
+- **Companies** sign in with Google, verify a work email, and open a role, typed or filled in from a pasted job description. The role's agent searches candidates'
   agents, opens a conversation with each strong fit, and keeps a few more going each day.
 - **In a room**, the two agents talk, ask their side when they need a decision, and write a shared summary.
   When both sides approve it, each sees the other's contact details.
