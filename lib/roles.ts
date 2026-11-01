@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { FieldValue, type Firestore } from '@google-cloud/firestore';
 import { db } from './db.ts';
 import { callerOf, parseWorkModes, RateLimiter, TalentError, text, verifiedDomains, type Profiles, type RoleDraft, type TalentCaller, type TalentProfile, type WorkMode } from './profiles.ts';
+import type { RoomStatus } from './parly.ts';
 import type { CompanyRoomSummary, TalentRoomViews } from './roomViews.ts';
 
 /** A company's standing role: its agent keeps finding good fits and talking to them until it's paused or closed. */
@@ -47,6 +48,9 @@ function roleFields(raw: unknown): RoleDraft {
   return { title, looking, location: text(body.location ?? '', 200, 'location'), workModes: parseWorkModes(body.workModes ?? []), comp: text(body.comp ?? '', 200, 'comp'), mustHaves: text(body.mustHaves ?? '', 2000, 'mustHaves') };
 }
 
+/** What a role's agent works from when it opens a conversation. */
+const briefOf = (role: Role) => ({ role: role.title, comp: role.comp, mustHaves: [role.looking, role.mustHaves].filter(Boolean).join('\n'), location: role.location, workModes: role.workModes });
+
 export class Roles {
   private readonly col;
   private readonly readLimiter = new RateLimiter(5, 60 * 60_000, 'role imports');
@@ -58,7 +62,8 @@ export class Roles {
     this.col = store.collection('talent_roles');
   }
 
-  async create(caller: TalentCaller, raw: unknown): Promise<{ role: Role; opened: number }> {
+  /** With `talkTo`, that candidate's conversation opens first; if it can't, the role isn't kept. */
+  async create(caller: TalentCaller, raw: unknown, talkTo?: string): Promise<{ role: Role; opened: number; room?: { id: string; status: RoomStatus } }> {
     const { id: companyId } = callerOf(caller);
     const fields = roleFields(raw);
     const domains = await this.domainsOf(companyId);
@@ -66,7 +71,23 @@ export class Roles {
     const ref = this.col.doc(randomUUID());
     const role: Role = { id: ref.id, companyId, companyName: domains[0]!, ...fields, status: 'open', contacted: [], createdAt: now, updatedAt: now };
     await ref.set(role);
-    return { role, opened: await this.fill(ref.id, FIRST_FILL) };
+    if (talkTo === undefined) return { role, opened: await this.fill(ref.id, FIRST_FILL) };
+    const room = await this.talk(caller, ref.id, talkTo).catch(async (err) => { await ref.delete(); throw err; });
+    const opened = await this.fill(ref.id, FIRST_FILL).catch((err) => { console.error(`role ${ref.id}: first fill failed`, err); return 0; });
+    return { role, opened, room };
+  }
+
+  /** A recruiter's Talk: one conversation about a role they chose. Paused roles count; only auto-fill stops for them. */
+  async talk(caller: TalentCaller, roleId: string, candidateAlias: string): Promise<{ id: string; status: RoomStatus }> {
+    const ref = await this.owned(caller, roleId);
+    const role = (await ref.get()).data() as Role;
+    if (role.status === 'closed') throw new TalentError('invalid', 'That role is closed');
+    // ponytail: only the 100 latest rooms are checked, same ceiling as fill; a per-candidate query if a company outgrows it.
+    const already = (await this.rooms.listCompanyRooms(role.companyId)).find((r) => r.candidateAlias === candidateAlias);
+    if (already) return { id: already.id, status: already.status };
+    const room = await this.rooms.openRoom(role.companyId, { candidateAlias, roleId, brief: briefOf(role) });
+    await ref.update({ contacted: FieldValue.arrayUnion(candidateAlias) });
+    return room;
   }
 
   /** Fills the role form from a pasted job description; nothing is stored. */
@@ -92,7 +113,7 @@ export class Roles {
     let opened = 0;
     for (const p of picks) {
       try {
-        await this.rooms.openRoom(role.companyId, { candidateAlias: p.alias, roleId, brief: { role: role.title, comp: role.comp, mustHaves: [role.looking, role.mustHaves].filter(Boolean).join('\n'), location: role.location, workModes: role.workModes } });
+        await this.rooms.openRoom(role.companyId, { candidateAlias: p.alias, roleId, brief: briefOf(role) });
         await this.col.doc(roleId).update({ contacted: FieldValue.arrayUnion(p.alias) });
         opened++;
       } catch (err) {
