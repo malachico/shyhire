@@ -81,3 +81,40 @@ ${reach.length ? `<div style="height:24px;"></div>${heading('Reach them')}
 
   return { subject, text, html };
 }
+
+export type AttentionKind = 'question' | 'summary' | 'their_approval';
+
+const ATTENTION: Record<AttentionKind, { subject: string; body: string; action: string }> = {
+  question: { subject: 'Your agent has a question for you', body: 'The conversation is waiting for your answer.', action: 'Answer' },
+  summary: { subject: 'A summary is waiting for your approval', body: 'Your agent wrote up where the conversation landed. Read it and approve it, or ask for changes.', action: 'Review the summary' },
+  their_approval: { subject: 'They approved. Your turn', body: 'The other side approved the summary. If you approve it too, it is a match.', action: 'Review the summary' },
+};
+
+/**
+ * Sent while the conversation is still blind, so it holds nothing from the room: no role, no question, no summary, no name.
+ * Anything an agent wrote could carry a name or employer, so the details stay behind the sign-in.
+ */
+export function attentionEmail(kind: AttentionKind, url: string): { subject: string; text: string; html: string } {
+  const { subject, body, action } = ATTENTION[kind];
+  const text = `${body}\n\n${action}: ${url}`;
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:#FBF8F3;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FBF8F3;"><tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border:1px solid #E6DFD3;border-radius:16px;overflow:hidden;">
+<tr><td align="center" style="background:#22305A;padding:28px;">
+<p style="margin:0 0 16px;font:800 18px ${FONT};letter-spacing:-.03em;color:#F5B700;">Shyhire</p>
+<h1 style="margin:0;font:800 26px/32px ${FONT};letter-spacing:-.03em;color:#fff;">${esc(subject)}</h1>
+</td></tr>
+<tr><td style="padding:28px;">
+<p style="margin:0;font:16px/24px ${FONT};color:#141414;">${esc(body)}</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:28px;"><tr><td style="background:#F5B700;border-radius:10px;">
+<a href="${esc(url)}" style="display:inline-block;padding:13px 24px;font:700 15px ${FONT};color:#141414;text-decoration:none;">${esc(action)}</a>
+</td></tr></table>
+</td></tr>
+</table>
+<p style="margin:16px 0 0;font:12px/18px ${FONT};color:#6B6560;">You're getting this because a conversation of yours on Shyhire needs you.</p>
+</td></tr></table>
+</body></html>`;
+  return { subject, text, html };
+}
