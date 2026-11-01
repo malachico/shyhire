@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { decideTalentRoom } from '@/lib/actions/rooms';
+import { Markdown } from './Markdown';
 
 /** The agent's question: one tap on an option, or "Other…" with a short answer. */
 export function TalentRoomDecisionForm({ roomId, question, options }: { roomId: string; question: string; options: string[] }) {
@@ -26,7 +27,7 @@ export function TalentRoomDecisionForm({ roomId, question, options }: { roomId: 
 
   if (answered) return <p role="status" className="mt-2 text-sm">Sent to your agent: <span className="font-medium">{answered}</span></p>;
   return <div className="mt-2">
-    <p className="font-medium">{question}</p>
+    <div className="font-medium"><Markdown text={question} /></div>
     {!!options.length && <div className="mt-3 flex flex-wrap gap-2">
       {options.map((o) => <button key={o} type="button" disabled={pending} onClick={() => send(o)} className="btn text-sm hover:border-[var(--accent)]">{o}</button>)}
       {!other && <button type="button" disabled={pending} onClick={() => setOther(true)} className="btn text-sm">Other…</button>}

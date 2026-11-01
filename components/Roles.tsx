@@ -27,7 +27,7 @@ export function RoleForm({ first }: { first: boolean }) {
     <div><h2 className="font-semibold">New role</h2><p className="muted text-sm">Your agent talks to the best fits now, then a few more each day. You only hear when it needs you or there&apos;s a mutual yes.</p></div>
     <label className="field">Role title<input className="input" name="title" required maxLength={200} placeholder="Senior backend engineer" /></label>
     <label className="field">Who you&apos;re looking for<textarea className="input min-h-24" name="looking" required maxLength={2000} placeholder="Payments or fintech background, Go and Postgres in production, remote within EU hours" /></label>
-    <label className="field">Salary band<input className="input" name="comp" maxLength={200} placeholder="$170k–$200k" /></label>
+    <label className="field">Salary<input className="input" name="comp" maxLength={200} placeholder="e.g. 150–200k ILS, flexible · or $180k–$210k + equity" /><span className="hint block">Free text, recommended.</span></label>
     <label className="field">Private notes for your agent<textarea className="input min-h-20" name="mustHaves" maxLength={2000} placeholder="Must be able to start within 2 months. Can stretch to $210k for someone exceptional." /><span className="hint block">Only your agent sees these.</span></label>
     {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
     <div className="flex items-center gap-3">

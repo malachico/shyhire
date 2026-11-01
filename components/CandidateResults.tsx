@@ -63,7 +63,7 @@ export function CandidateResults({ results, query, existing }: { results: Candid
           </div>
         </div>
         <label className="field">Role<input className="input" value={role} onChange={(e) => setRole(e.target.value)} maxLength={200} required placeholder="Senior backend engineer" /></label>
-        <label className="field">Salary band<input className="input" value={comp} onChange={(e) => setComp(e.target.value)} maxLength={200} placeholder="$180k–$220k" /></label>
+        <label className="field">Salary<input className="input" value={comp} onChange={(e) => setComp(e.target.value)} maxLength={200} placeholder="e.g. 150–200k ILS, flexible · or $180k–$210k + equity" /><span className="hint block">Free text, recommended.</span></label>
         <label className="field">Must-haves<textarea className="input min-h-20" value={mustHaves} onChange={(e) => setMustHaves(e.target.value)} maxLength={2000} placeholder="5+ years Go, remote in EU" /></label>
         {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
         <div className="flex items-center justify-end gap-3">
