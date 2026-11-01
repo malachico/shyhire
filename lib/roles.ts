@@ -140,8 +140,8 @@ export class Roles {
   async list(caller: TalentCaller): Promise<RoleView[]> {
     const { id } = callerOf(caller);
     const [snap, rooms] = await Promise.all([this.col.where('companyId', '==', id).get(), this.rooms.listCompanyRooms(id)]);
-    return snap.docs.map((d) => d.data() as Role).filter((r) => r.status !== 'closed')
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    return snap.docs.map((d) => d.data() as Role)
+      .sort((a, b) => Number(a.status === 'closed') - Number(b.status === 'closed') || b.createdAt.localeCompare(a.createdAt))
       .map((role) => ({ ...role, stats: statsOf(rooms.filter((r) => r.roleId === role.id)) }));
   }
 
