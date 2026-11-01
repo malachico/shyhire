@@ -77,6 +77,8 @@ export interface ConversationRow {
 export interface CandidateRequestSummary {
   id: string;
   companyName: string;
+  /** The role title, company names blanked until both sides approve. */
+  role?: string;
   candidateAlias: string;
   status: RoomStatus;
   waitingOn?: RoomSideKind;
@@ -103,6 +105,8 @@ export interface TalentRoomDetail {
   companyName: string;
   candidateAlias: string;
   brief?: TalentRoomBrief;
+  /** The candidate's view of the role title. */
+  role?: string;
   goal: string;
   status: RoomStatus;
   waitingOn?: RoomSideKind;
@@ -125,10 +129,19 @@ export interface ParlyRoomsClient {
   close?: (roomId: string) => Promise<{ ok: true }>;
 }
 
+/** What a candidate sees for the company until both sides approve. */
+const BLIND_COMPANY = 'A verified company';
+/**
+ * Blanks the company from what a candidate reads until both sides approve.
+ * ponytail: matches the verified domain and its first label, so a brand that differs from the domain only has the agent instruction, and a domain that is a common word (apple.com) over-blanks.
+ */
+const blinded = (status: RoomStatus, companyName: unknown) => (s: string) =>
+  status === 'agreed' ? s : redact(s, typeof companyName === 'string' ? [companyName] : []);
+
 const HIRING_AGENT_KEY = 'hiring-rep';
 const CANDIDATE_AGENT_KEY = 'candidate-rep';
 const HIRING_AGENT_INSTRUCTIONS =
-  'You represent the hiring company in an anonymous Shyhire conversation. Evaluate mutual role, technical, compensation, and working-mode fit against your private brief without asking for or revealing personal identifiers. Use ASK MY SIDE when you need a decision from the hiring team, and draft/update the shared fit summary once fit is clear.';
+  'You represent the hiring company in an anonymous Shyhire conversation. Evaluate mutual role, technical, compensation, and working-mode fit against your private brief without asking for or revealing personal identifiers. Never name the company, its domain, product or website before both sides approve. Use ASK MY SIDE when you need a decision from the hiring team, and draft/update the shared fit summary once fit is clear.';
 const CANDIDATE_AGENT_INSTRUCTIONS =
   'You represent the candidate in an anonymous Shyhire conversation. Protect candidate anonymity strictly: never reveal names, employers, URLs, or raw private text. Evaluate mutual fit against your private brief. Never state their minimum or current pay, or any number from the private brief, in the conversation or the shared summary: say only whether an offer is within, near or below what they look for. Use ASK MY SIDE when a decision is needed from the candidate, and draft/update the shared fit summary once fit is clear.';
 
@@ -377,22 +390,21 @@ export class TalentRoomViews {
       throw new TalentError('unavailable', 'Room creation is not configured');
     }
 
-    const companyBriefText = [
-      `Company: ${companyName}`,
+    const companyBriefText = redact([
       `Role: ${role}`,
       comp ? `Compensation band: ${comp}` : '',
       mustHaves ? `Must-haves and private notes: ${mustHaves}` : '',
     ]
       .filter(Boolean)
-      .join('\n');
+      .join('\n'), companyDomains);
 
     const candidateBriefText = candidateBrief(candidateProfile);
 
-    const goal = `Evaluate fit: ${companyName} (${role}) × ${candidateProfile.alias}`.slice(0, 200);
+    const goal = `Evaluate fit: ${redact(role, companyDomains)} × ${candidateProfile.alias}`.slice(0, 200);
     // The candidate's own agent when Parly has it (it carries their brief); else the shared template with the brief.
     const ownAgent = await this.syncCandidate(candidateProfile).catch((err) => { console.error('candidate agent sync', err); return false; });
     const sides: [SideInput, SideInput] = [
-      { ref: 'company', name: companyName.slice(0, 60), brief: companyBriefText.slice(0, 4000), agent: HIRING_AGENT_KEY },
+      { ref: 'company', name: BLIND_COMPANY, brief: companyBriefText.slice(0, 4000), agent: HIRING_AGENT_KEY },
       ownAgent
         ? { ref: 'candidate', name: candidateProfile.alias.slice(0, 60), brief: '', agent: candidateAgentKey(candidateProfile.alias) }
         : { ref: 'candidate', name: candidateProfile.alias.slice(0, 60), brief: candidateBriefText.slice(0, 4000), agent: CANDIDATE_AGENT_KEY },
@@ -537,7 +549,7 @@ export class TalentRoomViews {
     const [hiring, offers] = await Promise.all([this.listCompanyRooms(caller), this.listCandidateRequests(caller)]);
     const rows: ConversationRow[] = [
       ...hiring.map((r) => ({ id: r.id, side: 'company' as const, title: r.candidateAlias, role: r.brief.role, status: r.status, needsMe: !!r.needsDecision, documentVersion: r.documentVersion, iApproved: r.iApproved, updatedAt: r.updatedAt })),
-      ...offers.map((r) => ({ id: r.id, side: 'candidate' as const, title: r.companyName, status: r.status, needsMe: !!r.needsDecision, documentVersion: r.documentVersion, iApproved: r.iApproved, updatedAt: r.updatedAt })),
+      ...offers.map((r) => ({ id: r.id, side: 'candidate' as const, title: r.companyName, role: r.role, status: r.status, needsMe: !!r.needsDecision, documentVersion: r.documentVersion, iApproved: r.iApproved, updatedAt: r.updatedAt })),
     ];
     return rows.sort((a, b) => Number(b.needsMe) - Number(a.needsMe) || b.updatedAt.localeCompare(a.updatedAt));
   }
@@ -575,7 +587,7 @@ export class TalentRoomViews {
     });
   }
 
-  /** Candidate requests list (`candidateId == me` ordered by `updatedAt desc`). Never exposes `brief`, `companyId`, or company-side decision details. */
+  /** Candidate requests list (`candidateId == me` ordered by `updatedAt desc`). Never exposes `brief` (beyond the role title), `companyId`, or company-side decision details, and hides the company until both sides approve. */
   async listCandidateRequests(caller: TalentCaller): Promise<CandidateRequestSummary[]> {
     const { id: personId } = callerOf(caller, 'Sign in as a person to view requests');
     const snap = await this.col.where('candidateId', '==', personId).orderBy('updatedAt', 'desc').limit(100).get();
@@ -584,14 +596,17 @@ export class TalentRoomViews {
       const decision = normalizeDecision(data.needsDecision);
       const status = normalizeStatus(data.status);
       const waitingOn = status === 'needs_decision' ? decision?.side : undefined;
+      const blind = blinded(status, data.companyName);
+      const role = blind(normalizeBrief(data.brief).role);
       return {
         id: doc.id,
-        companyName: typeof data.companyName === 'string' ? data.companyName : '',
+        companyName: status !== 'agreed' ? BLIND_COMPANY : typeof data.companyName === 'string' ? data.companyName : '',
+        ...(role ? { role } : {}),
         candidateAlias: typeof data.candidateAlias === 'string' ? data.candidateAlias : '',
         status,
         ...(waitingOn ? { waitingOn } : {}),
         ...(status === 'needs_decision' && decision?.side === 'candidate'
-          ? { needsDecision: { side: 'candidate' as const, question: decision.question, options: decision.options } }
+          ? { needsDecision: { side: 'candidate' as const, question: blind(decision.question), options: decision.options.map(blind) } }
           : {}),
         ...(typeof data.documentVersion === 'number' ? { documentVersion: data.documentVersion } : {}),
         iApproved: typeof data.documentVersion === 'number' && (data as { approved?: Record<string, number> }).approved?.candidate === data.documentVersion,
@@ -612,6 +627,8 @@ export class TalentRoomViews {
       const { messages } = await this.parlyClient.messages(id, mySideRef);
 
       const status = normalizeStatus(room.status ?? record.status);
+      const hidden = viewerSide === 'candidate' && status !== 'agreed';
+      const blind = viewerSide === 'candidate' ? blinded(status, record.companyName) : (s: string) => s;
       const storedDecision = normalizeDecision(record.needsDecision);
       const livePending = room.pending?.[0];
       const liveDecisionSide = livePending ? sideKindOfRef(livePending.sideRef, room, record) : undefined;
@@ -636,7 +653,7 @@ export class TalentRoomViews {
         const v = room.document.version;
         document = {
           version: v,
-          text: room.document.text,
+          text: blind(room.document.text),
           myApproved: Boolean(myApp && myApp.version === v),
           otherApproved: Boolean(otherApp && otherApp.version === v),
           ...(myApp && myApp.version === v ? { myApprovedAt: myApp.at } : {}),
@@ -651,16 +668,16 @@ export class TalentRoomViews {
       return {
         id,
         viewerSide,
-        companyName: typeof record.companyName === 'string' ? record.companyName : '',
+        companyName: hidden ? BLIND_COMPANY : typeof record.companyName === 'string' ? record.companyName : '',
         candidateAlias: typeof record.candidateAlias === 'string' ? record.candidateAlias : '',
-        ...(viewerSide === 'company' ? { brief: normalizeBrief(record.brief) } : {}),
-        goal: typeof room.goal === 'string' ? room.goal : '',
+        ...(viewerSide === 'company' ? { brief: normalizeBrief(record.brief) } : { role: blind(normalizeBrief(record.brief).role) }),
+        goal: typeof room.goal === 'string' ? blind(room.goal) : '',
         status,
         ...(waitingOn ? { waitingOn } : {}),
-        ...(myDecision ? { needsDecision: myDecision } : {}),
+        ...(myDecision ? { needsDecision: { ...myDecision, question: blind(myDecision.question), options: myDecision.options.map(blind) } } : {}),
         ...(document ? { document } : {}),
         ...(revealedContact ? { revealedContact } : {}),
-        messages: Array.isArray(messages) ? messages : [],
+        messages: Array.isArray(messages) ? messages.map((m) => ({ ...m, from: blind(m.from), text: blind(m.text) })) : [],
         createdAt: typeof record.createdAt === 'string' ? record.createdAt : '',
         updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : '',
       };

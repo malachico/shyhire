@@ -27,6 +27,7 @@ export default function Privacy() {
     <ul>
       <li>Companies see an anonymous profile: an alias, the facts you choose to show, and which accounts are verified. Never your name, employers, links or pay numbers.</li>
       <li>Your name and contact details are shared with the other side only after both of you say yes.</li>
+      <li>Companies stay anonymous to you too: you see the company&apos;s name only after both of you say yes.</li>
       <li>We don&apos;t sell your data or use it for advertising.</li>
     </ul>
 

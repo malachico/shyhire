@@ -82,7 +82,7 @@ describe('Talent company rooms (C) and candidate requests (D)', () => {
 
     const candidateReqs = await views.listCandidateRequests('gh-candidate-secret-1');
     assert.deepEqual(candidateReqs.map((r) => r.id), ['room-1']);
-    assert.equal(candidateReqs[0]!.companyName, 'acme.dev');
+    assert.equal(candidateReqs[0]!.companyName, 'A verified company');
     assert.equal(candidateReqs[0]!.needsDecision?.question, 'Would you relocate to NYC?');
     assert.doesNotMatch(JSON.stringify(candidateReqs), /180k|210k|Go, Postgres|gh-company-1/);
 
@@ -242,7 +242,7 @@ describe('Talent company rooms (C) and candidate requests (D)', () => {
     assert.equal(openedPayloads.length, 1);
     const sent = openedPayloads[0]!;
     assert.equal(sent.sides[0]!.ref, 'company');
-    assert.equal(sent.sides[0]!.name, 'sub.acme.test');
+    assert.equal(sent.sides[0]!.name, 'A verified company');
     assert.match(sent.sides[0]!.brief, /Senior Go Engineer/);
     assert.equal(sent.sides[1]!.ref, 'candidate');
     assert.equal(sent.sides[1]!.name, savedCand.alias);
@@ -409,5 +409,82 @@ describe('Talent company rooms (C) and candidate requests (D)', () => {
     assert.equal(briefLines.includes('Locations: New York, London · remote, hybrid'), true);
     assert.equal(briefLines.includes('No-gos: No ad-tech or heavy travel'), true);
     assert.doesNotMatch(candSide.brief, /google-sub-candidate-split|PrivateCo/);
+  });
+
+  it('keeps the company hidden from the candidate until both sides approve, and hides nothing from the company', async () => {
+    const db = testDb();
+    const stored: StoredTalentRoom = {
+      companyId: 'gh-company-blind',
+      companyName: 'acme.dev',
+      candidateId: 'gh-candidate-blind',
+      candidateAlias: 'Candidate #b1b2b3b4',
+      brief: { role: 'Staff Engineer at Acme', comp: '', mustHaves: '' },
+      status: 'needs_decision',
+      needsDecision: { side: 'candidate', question: 'Would you join Acme?', options: ['Yes, Acme', 'No'] },
+      createdAt: '2026-10-29T05:00:00.000Z',
+      updatedAt: '2026-10-29T05:10:00.000Z',
+    };
+    await db.collection('talent_rooms').doc('room-blind').set(stored);
+    const text = 'Acme builds https://acme.dev, see acme.dev';
+    const message = (from: string): RoomMessage => ({ id: 'm1', channel: 'table', from, at: '2026-10-29T05:01:00.000Z', text });
+    const room: Room = {
+      id: 'room-blind',
+      goal: 'Evaluate fit: acme.dev (Staff Engineer) × Candidate #b1b2b3b4',
+      status: 'needs_decision',
+      sides: [{ ref: 'company', name: 'acme.dev' }, { ref: 'candidate', name: 'Candidate #b1b2b3b4' }],
+      pending: [{ id: 'd1', sideRef: 'candidate', question: 'Would you join Acme?', options: ['Yes, Acme', 'No'] }],
+      document: { version: 1, text, approvals: {} },
+    } as unknown as Room;
+    const { client } = fakeParlyClient({ 'room-blind': { room, messagesBySide: { candidate: [message('acme.dev agent')], company: [message('acme.dev agent')] } } });
+    const views = new TalentRoomViews(db, client);
+
+    const hidden = await views.getRoomView('gh-candidate-blind', 'room-blind');
+    assert.doesNotMatch(JSON.stringify(hidden), /acme/i);
+    assert.equal(hidden.role, 'Staff Engineer at [employer]');
+    assert.doesNotMatch(JSON.stringify(await views.listCandidateRequests('gh-candidate-blind')), /acme/i);
+    assert.doesNotMatch(JSON.stringify(await views.listConversations('gh-candidate-blind')), /acme/i);
+
+    const companyView = await views.getRoomView('gh-company-blind', 'room-blind');
+    assert.equal(companyView.companyName, 'acme.dev');
+    assert.equal(companyView.document?.text, text);
+    assert.equal(companyView.messages[0]!.text, text);
+
+    room.status = 'agreed';
+    room.pending = [];
+    await db.collection('talent_rooms').doc('room-blind').update({ status: 'agreed' });
+    const revealed = await views.getRoomView('gh-candidate-blind', 'room-blind');
+    assert.equal(revealed.companyName, 'acme.dev');
+    assert.equal(revealed.document?.text, text);
+    assert.equal((await views.listCandidateRequests('gh-candidate-blind'))[0]!.companyName, 'acme.dev');
+  });
+
+  it('opens a room with nothing naming the company in what Parly stores', async () => {
+    const db = testDb();
+    const { Profiles } = await import('../lib/profiles.ts');
+    const profiles = new Profiles(db);
+    await profiles.verify('gh-company-opaque', { id: 'work-email:acme.dev', source: 'work-email', label: 'Work email verified', verifiedAt: '2026-10-29T05:00:00.000Z', data: { domain: 'acme.dev' } });
+    const cand = await profiles.save('gh-candidate-opaque', {
+      version: 0, headline: 'Backend Engineer', about: 'Go', openTo: 'Backend', salary: { min: 100000, currency: 'USD' }, locations: [], workModes: [], noGos: '',
+      experience: [{ title: 'Engineer', company: 'OtherCo', start: '2019-01', end: '2024-01', description: 'Go', hidden: false }],
+    });
+    const opened: unknown[] = [];
+    const { client } = fakeParlyClient({});
+    client.createAgent = async (key, name) => ({ key, name });
+    client.openRoom = async (body) => {
+      opened.push(body);
+      return { id: 'parly-room-opaque', status: 'talking' };
+    };
+
+    await new TalentRoomViews(db, client).openRoom('gh-company-opaque', {
+      candidateAlias: cand.alias,
+      brief: { role: 'Staff Engineer at Acme', comp: '$200k', mustHaves: 'Go, knows acme.dev' },
+    });
+
+    assert.equal(opened.length, 1);
+    assert.doesNotMatch(JSON.stringify(opened[0]), /acme/i);
+    assert.match(JSON.stringify(opened[0]), /Staff Engineer at \[employer\]/);
+    const saved = (await db.collection('talent_rooms').doc('parly-room-opaque').get()).data() as StoredTalentRoom;
+    assert.equal(saved.companyName, 'acme.dev');
+    assert.equal(saved.brief.role, 'Staff Engineer at Acme');
   });
 });

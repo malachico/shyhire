@@ -36,7 +36,7 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
         <h1 className="truncate text-2xl font-semibold tracking-tight">{title}</h1>
-        <p className="muted text-sm">{isCompany ? `You're hiring${room.brief?.role ? ` · ${room.brief.role}` : ''}` : 'Wants to talk with you'}</p>
+        <p className="muted text-sm">{isCompany ? `You're hiring${room.brief?.role ? ` · ${room.brief.role}` : ''}` : `Wants to talk with you${room.role ? ` · ${room.role}` : ''}`}</p>
       </div>
       <span className={pillClass(s.tone)}>{s.label}</span>
     </div>
