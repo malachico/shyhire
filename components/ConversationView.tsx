@@ -5,6 +5,7 @@ import { approveTalentRoom, passTalentRoom } from '@/lib/actions/rooms';
 import type { TalentRoomDetail } from '@/lib/roomViews';
 import { pillClass, statusOf } from '@/lib/status';
 import { Mark } from './Brand';
+import { Markdown } from './Markdown';
 import { TalentRoomDecisionForm } from './TalentRoomDecisionForm';
 
 /** One conversation: its status, the one thing it needs from you (if any), the contact once matched. */
@@ -61,7 +62,7 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
 
     {!ended && !matched && !myDecision && doc && <section className="card mt-6">
       <p className="font-semibold">{doc.myApproved ? 'You approved. Waiting for them.' : 'The agents agree on this summary'}</p>
-      <div className="mt-3 whitespace-pre-wrap rounded-lg bg-[var(--bg)] p-4 text-sm leading-relaxed">{doc.text}</div>
+      <div className="mt-3 rounded-lg bg-[var(--bg)] p-4 text-sm leading-relaxed"><Markdown text={doc.text} /></div>
       {doc.myApproved
         ? <p className="muted mt-3 text-sm">Contact details are shared once they approve too.</p>
         : <div className="mt-4 flex flex-wrap items-center gap-4">
@@ -82,7 +83,7 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
     {isCompany && room.brief && (room.brief.comp || room.brief.mustHaves) && <details className="mt-6">
       <summary className="cursor-pointer text-sm font-medium">Your private brief</summary>
       <dl className="mt-3 space-y-2 text-sm">
-        {room.brief.comp && <div><dt className="muted text-xs">Salary band</dt><dd>{room.brief.comp}</dd></div>}
+        {room.brief.comp && <div><dt className="muted text-xs">Salary</dt><dd>{room.brief.comp}</dd></div>}
         {room.brief.mustHaves && <div><dt className="muted text-xs">Must-haves</dt><dd className="whitespace-pre-wrap">{room.brief.mustHaves}</dd></div>}
       </dl>
     </details>}
@@ -92,7 +93,7 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
       {!room.messages.length ? <p className="muted mt-3 text-sm">Nothing yet.</p> : <ul className="mt-3 space-y-2">
         {room.messages.map((m) => <li key={m.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-sm">
           <p className="muted text-xs">{m.from}{m.channel === 'corner' && ' · only you see this'}</p>
-          <p className="mt-1 whitespace-pre-wrap leading-relaxed">{m.text}</p>
+          <div className="mt-1 leading-relaxed"><Markdown text={m.text} /></div>
         </li>)}
       </ul>}
     </details>
