@@ -54,6 +54,11 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
       </dl>
     </section>}
 
+    {matched && doc && <section className="card mt-6">
+      <p className="font-semibold">What you both agreed</p>
+      <div className="mt-3 rounded-lg bg-[var(--bg)] p-4 text-sm leading-relaxed"><Markdown text={doc.text} /></div>
+    </section>}
+
     {!ended && !matched && myDecision && <section className="card mt-6">
       <p className="muted flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.08em]"><Mark size={34} flower={false} look="up" />Your agent asks</p>
       <TalentRoomDecisionForm roomId={room.id} question={myDecision.question} options={myDecision.options} />
