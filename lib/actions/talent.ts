@@ -9,11 +9,11 @@ async function requirePersonId(): Promise<string> {
   return session.sub;
 }
 
-export async function saveTalentProfile(body: unknown): Promise<{ profile: TalentProfile; error?: never } | { error: string; profile?: never }> {
+export async function saveTalentProfile(body: unknown, check = false): Promise<{ profile: TalentProfile; error?: never } | { error: string; profile?: never }> {
   try {
     const session = await currentSession();
     if (!session) throw new TalentError('unauthorized', 'Sign in first');
-    return { profile: await profiles().save(session.sub, body, session) };
+    return { profile: await profiles().save(session.sub, body, session, check) };
   } catch (error) {
     if (error instanceof TalentError) return { error: error.message };
     throw error;
