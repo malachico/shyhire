@@ -491,7 +491,8 @@ export class Profiles {
     const facts = cvFacts(written);
     return { facts, leaks: this.leaks(facts.map((f) => f.text).join('\n'), profile, me) };
   }
-  async save(caller: TalentCaller, raw: unknown, me: { name?: string; email?: string } = {}): Promise<TalentProfile> {
+  /** With check, runs every rule and throws what saving would throw, but writes nothing. */
+  async save(caller: TalentCaller, raw: unknown, me: { name?: string; email?: string } = {}, check = false): Promise<TalentProfile> {
     const { id } = callerOf(caller);
     const body = object(raw);
     const allowed = new Set([
@@ -577,10 +578,11 @@ export class Profiles {
       next.employerDomains = [...new Set([...next.employerDomains, ...verifiedDomains(next.verified)])];
       next.publicSummary = factsSummary(next);
       const leaks = this.leaks(next.facts.map((f) => f.text).join('\n'), next, { ...me, email: me.email ?? callerOf(caller).email });
-      if (leaks.length) throw new TalentError('invalid', `What companies see mentions ${leaks.join(', ')}. Remove it, then save.`);
+      if (leaks.length) throw new TalentError('invalid', `What companies see mentions ${leaks.join(', ')}. Remove it, then try again.`);
+      if (check) return next;
       tx.set(ref, next);
       return next;
-    }).then((p) => this.changed(p));
+    }).then((p) => (check ? p : this.changed(p)));
   }
   async search(caller: TalentCaller, raw: unknown): Promise<{ profiles: CandidateCard[]; capped: boolean }> {
     const { id } = callerOf(caller);

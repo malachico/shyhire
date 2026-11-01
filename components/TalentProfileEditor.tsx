@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import type { Experience, Fact, ProfileDraft, TalentProfile, WorkMode } from '@/lib/talent';
 import { saveTalentProfile, setDiscoverable, writeSummary } from '@/lib/actions/talent';
 import { privacyLeaks } from '@/lib/privacy';
@@ -46,6 +47,8 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError ?? '');
   const [notice, setNotice] = useState('');
+  const [justFinished, setJustFinished] = useState(false);
+  const [rewriteError, setRewriteError] = useState('');
   const [editing, setEditing] = useState<'' | 'facts' | 'experience' | 'import' | 'prefs'>('');
   const onboarded = saved.version > 0;
   const change = (f: Partial<TalentProfile>) => { setProfile((p) => ({ ...p, ...f })); setNotice(''); };
@@ -57,16 +60,32 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   };
   const leaks = privacyLeaks(profile.facts.map((f) => f.text).join('\n'), me, list(domains)); // ponytail: employer names are checked on save
 
+  const profileBody = () => {
+    const { version, headline, about, facts, hiddenFacts, details, experience, openTo, noGos } = profile;
+    return { version, headline, about, facts, hiddenFacts, ...(details ? { details } : {}), experience, openTo, noGos, employerDomains: list(domains) };
+  };
+
+  // Step 2 must not save: saving lists the candidate. Salary and places are left out so a bad one stays a step 3 error.
+  async function checkStep2() {
+    if (!profile.headline.trim()) { setError('Add a headline to continue.'); return; }
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const r = await saveTalentProfile(profileBody(), true);
+      if (r.error) setError(r.error); else setStep(3);
+    } catch { setError('Could not check your profile. Your edits are still here; try again.'); }
+    finally { setBusy(false); }
+  }
+
   async function save(): Promise<boolean> {
     setBusy(true); setError(''); setNotice('');
     try {
-      const { version, headline, about, facts, hiddenFacts, details, experience, openTo, workModes, noGos } = profile;
-      const r = await saveTalentProfile({ version, headline, about, facts, hiddenFacts, ...(details ? { details } : {}), experience, openTo, salary: { min: salaryMin.trim() ? Number(salaryMin) : null, currency }, locations: list(locationsText), workModes, noGos, employerDomains: list(domains) });
+      const r = await saveTalentProfile({ ...profileBody(), salary: { min: salaryMin.trim() ? Number(salaryMin) : null, currency }, locations: list(locationsText), workModes: profile.workModes });
       if (r.error || !r.profile) { setError(r.error ?? 'Could not save.'); return false; }
       setProfile(r.profile); setSaved(r.profile);
       setDomains(r.profile.employerDomains.join(', ')); setLocationsText(r.profile.locations.join(', '));
       setSalaryMin(r.profile.salary.min !== undefined ? String(r.profile.salary.min) : ''); setCurrency(r.profile.salary.currency);
-      setNotice('Saved.'); setEditing('');
+      if (profile.version === 0) setJustFinished(true); else setNotice('Saved.');
+      setEditing('');
       return true;
     } catch { setError('Could not save. Your edits are still here; try again.'); return false; }
     finally { setBusy(false); }
@@ -86,13 +105,13 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   }
 
   async function rewrite() {
-    setBusy(true); setError('');
+    setBusy(true); setRewriteError('');
     try {
       const { headline, about, experience, openTo, details } = profile;
       const r = await writeSummary({ headline, about, experience, openTo, ...(details ? { details } : {}) });
-      if ('error' in r && r.error) setError(r.error);
+      if ('error' in r && r.error) setRewriteError(r.error);
       else if ('facts' in r) change({ facts: r.facts });
-    } catch { setError('Could not write it. Try again, or write it yourself.'); }
+    } catch { setRewriteError('Could not write it. Try again, or write it yourself.'); }
     finally { setBusy(false); }
   }
 
@@ -126,7 +145,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
     </> : <p className="muted text-sm">CV import isn&apos;t available right now. Fill in your profile by hand.</p>}
     <p className="muted text-sm">
       {githubAvailable && <><a className="link" href="/talent/auth/github/start">Connect GitHub</a> to add your public activity (personal account only) · </>}
-      <button className="underline" onClick={() => setStep(2)}>Fill it in by hand</button>
+      <button className="underline" onClick={() => { setError(''); setStep(2); }}>Fill it in by hand</button>
     </p>
   </section>;
 
@@ -204,6 +223,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
         {profile.facts.length < 10 && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => change({ facts: [...profile.facts, { id: crypto.randomUUID(), text: '', source: 'cv' }] })}>+ Add a fact</button>}
         {importAvailable && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => void rewrite()}>{busy ? 'Writing…' : '✨ Write with AI'}</button>}
       </div>
+      {rewriteError && <p role="alert" className="mt-3 rounded-lg bg-[var(--bad-bg)] p-3 text-sm text-[var(--bad-fg)]">{rewriteError}</p>}
     </div>
     {!!leaks.length && <p role="alert" className="rounded-lg bg-[#fffaeb] p-3 text-sm text-[#93370d]">This mentions {leaks.join(', ')}. Companies see these facts, so remove it before saving.</p>}
   </section>;
@@ -214,10 +234,10 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       <p className="muted text-sm">Step {step} of 3</p>
       <div className="mt-2 h-1 rounded-full bg-[var(--border)]"><div className="h-1 rounded-full bg-[var(--accent)] transition-all" style={{ width: `${(step / 3) * 100}%` }} /></div>
       <h1 className="mt-6 text-2xl font-semibold tracking-tight">{titles[step]}</h1>
-      <div className="mt-6">{banner}</div>
+      <div className="mt-6">{step === 1 && banner}</div>
       {step === 1 && experienceStep}
-      {step === 2 && <div className="space-y-6">{factsEditor}{profileFields}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy || !profile.headline.trim()} onClick={() => setStep(3)}>Continue</button><button className="muted text-sm underline" onClick={() => setStep(1)}>Back</button></div></div>}
-      {step === 3 && <div className="space-y-6">{preferenceFields}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Start getting matched'}</button><button className="muted text-sm underline" onClick={() => setStep(2)}>Back</button></div></div>}
+      {step === 2 && <div className="space-y-6">{factsEditor}{profileFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void checkStep2()}>{busy ? 'Checking…' : 'Continue'}</button><button className="muted text-sm underline" disabled={busy} onClick={() => { setError(''); setStep(1); }}>Back</button></div></div></div>}
+      {step === 3 && <div className="space-y-6">{preferenceFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Start getting matched'}</button><button className="muted text-sm underline" onClick={() => { setError(''); setStep(2); }}>Back</button></div></div></div>}
     </main>;
   }
 
@@ -249,6 +269,11 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
         <span className={`relative h-6 w-10 rounded-full transition-colors ${saved.paused ? 'bg-[var(--border)]' : 'bg-[#12b76a]'}`}><span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${saved.paused ? 'left-0.5' : 'left-[18px]'}`} /></span>
       </button>
     </div>
+    {justFinished && !saved.paused && <section aria-label="What happens next" className="card space-y-2">
+      <h2 className="font-semibold">You&apos;re in. Your part is done for now.</h2>
+      <p className="text-sm">Companies can now find your anonymous profile. Your agent talks to them for you, without your name or employers.</p>
+      <p className="text-sm">When a company&apos;s agent wants to talk with you, it shows up in <Link href="/talent/conversations" className="underline underline-offset-4">Conversations</Link>. You decide what happens next.</p>
+    </section>}
     {banner}
     {editing === 'facts' ? factsEditor : preview}
 
