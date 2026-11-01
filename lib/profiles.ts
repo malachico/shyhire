@@ -708,6 +708,15 @@ export class Profiles {
       await this.changed(await this.mine(id));
     }
   }
+  /** Where match emails go. Runs on page load, so people signed in before this existed get mail without acting first. */
+  async rememberLogin(session: { sub: string; email?: string }): Promise<void> {
+    try {
+      await this.recordContact(session.sub, { ...(session.email ? { loginEmail: session.email } : {}) });
+    } catch {
+      // Showing the page matters more than the email.
+    }
+  }
+
   async recordContact(
     personId: string,
     contact: { githubLogin?: string; workEmail?: string; domain?: string; loginEmail?: string },

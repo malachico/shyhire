@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { before, describe, it } from 'node:test';
 import { testDb } from '../lib/db.ts';
 import { matchEmail } from '../lib/matchEmail.ts';
@@ -74,5 +75,21 @@ describe('match emails', () => {
     assert.ok(html.includes('R&#38;D') && html.includes('<strong>bold</strong>'));
     assert.ok(!html.includes('b="2'));
     assert.ok(text.includes('**bold**'));
+  });
+});
+
+describe('rememberLogin', () => {
+  it('stores the address of someone signed in before it was recorded, and survives no email', async () => {
+    const id = `old-session-${Date.now()}`;
+    const db = testDb();
+    const profiles = new Profiles(db);
+    await profiles.rememberLogin({ sub: id });
+    await profiles.rememberLogin({ sub: id, email: 'Old.User@Gmail.com' });
+    const contact = await db.collection('talent_contacts').doc(id).get();
+    assert.equal(contact.get('loginEmail'), 'old.user@gmail.com');
+  });
+
+  it('runs on every talent page load, not only on actions', () => {
+    assert.match(readFileSync('app/talent/layout.tsx', 'utf8'), /await profiles\(\)\.rememberLogin\(session\)/);
   });
 });
