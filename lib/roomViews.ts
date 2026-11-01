@@ -1,7 +1,7 @@
 import { FieldValue, type Firestore } from '@google-cloud/firestore';
 import { db } from './db.ts';
 import { appUrl } from './github.ts';
-import { matchEmail } from './matchEmail.ts';
+import { attentionEmail, matchEmail, type AttentionKind } from './matchEmail.ts';
 import { redact } from './privacy.ts';
 import { parly, ParlyError, type Room, type RoomMessage, type RoomStatus, type SideInput } from './parly.ts';
 import { callerOf, domainBlocked, parseWorkModes, TalentError, text, verifiedDomains, type CvDetails, type TalentCaller, type TalentProfile, type WorkMode } from './profiles.ts';
@@ -43,6 +43,8 @@ export interface StoredTalentRoom {
   status: RoomStatus;
   needsDecision?: TalentRoomDecision;
   documentVersion?: number;
+  /** The summary version each side approved. */
+  approved?: Partial<Record<RoomSideKind, number>>;
   /** Set once when the match emails go out. */
   matchMailedAt?: string;
   createdAt: string;
@@ -395,6 +397,24 @@ export class TalentRoomViews {
     }
   }
 
+  /** Tells these sides the conversation needs them. Never throws: a mail problem must not fail the event or the approval. */
+  // ponytail: at most once, like notifyMatch (the event id or approval is claimed first, no retry).
+  private async notifyAttention(roomId: string, kind: AttentionKind, sides: RoomSideKind[]): Promise<void> {
+    if (!this.mailer) return;
+    try {
+      const record = (await this.col.doc(roomId).get()).data() as StoredTalentRoom | undefined;
+      if (!record) return;
+      const mail = attentionEmail(kind, `${appUrl()}/talent/conversations/${roomId}`);
+      const sent = await Promise.allSettled(sides.map(async (side) =>
+        this.mailMatch(side === 'company' ? record.companyId : record.candidateId, await this.resolveRevealedContact(side, record), mail)));
+      for (const r of sent) {
+        if (r.status === 'rejected') console.error('attention email failed', roomId, (r.reason as { code?: string })?.code);
+      }
+    } catch (err) {
+      console.error('attention email failed', roomId, (err as { code?: string })?.code);
+    }
+  }
+
   /** One recipient per message, so neither side ever sees the other's address in the headers. */
   private async mailMatch(personId: string, self: TalentRevealedContact, mail: ReturnType<typeof matchEmail>): Promise<void> {
     const contact = await this.store.collection('talent_contacts').doc(personId).get();
@@ -525,7 +545,9 @@ export class TalentRoomViews {
     if (!roomId) return { ok: true, ignored: true };
 
     const ref = this.col.doc(roomId);
+    let attention: { kind: AttentionKind; sides: RoomSideKind[] } | undefined;
     const result = await this.store.runTransaction(async (tx): Promise<{ ok: true; duplicate?: boolean; ignored?: boolean }> => {
+      attention = undefined; // Firestore can re-run this closure: only the run that commits counts.
       const snap = await tx.get(ref);
       if (!snap.exists) return { ok: true, ignored: true };
       const current = snap.data() as StoredTalentRoom;
@@ -551,10 +573,17 @@ export class TalentRoomViews {
         if (side && question) {
           updates.status = 'needs_decision';
           updates.needsDecision = { side, question, options };
+          attention = { kind: 'question', sides: [side] };
         }
       } else if (kind === 'document_updated') {
         if (typeof data.version === 'number' && Number.isInteger(data.version) && data.version > 0) {
           updates.documentVersion = data.version;
+          // Agents revise a summary many times before anyone approves. Mail the first one, and one a person
+          // rewrote after an approval (only a person can), which voids that approval.
+          // ponytail: later agent revisions stay silent; the link always shows the newest. Throttle per version if people miss them.
+          const was = current.documentVersion;
+          const replacedApproved = was !== undefined && data.version > was && Object.values(current.approved ?? {}).includes(was);
+          if (was === undefined || replacedApproved) attention = { kind: 'summary', sides: ['company', 'candidate'] };
         }
         if (current.status === 'needs_decision') {
           updates.status = 'talking';
@@ -580,6 +609,7 @@ export class TalentRoomViews {
       return { ok: true };
     });
     if (kind === 'agreed') await this.notifyMatch(roomId);
+    else if (attention) await this.notifyAttention(roomId, attention.kind, attention.sides);
     return result;
   }
 
@@ -777,7 +807,7 @@ export class TalentRoomViews {
 
   /** Approves the current document version for the viewer's derived side (`company` or `candidate`). Never trusts a client-supplied side. */
   async approve(caller: TalentCaller, roomId: string, rawVersion: unknown): Promise<{ ok: true; agreed: boolean }> {
-    const { id, viewerSide } = await this.loadForViewer(caller, roomId);
+    const { id, viewerSide, record } = await this.loadForViewer(caller, roomId);
     if (typeof rawVersion !== 'number' || !Number.isInteger(rawVersion) || rawVersion < 1) {
       throw new TalentError('invalid', 'version must be a positive integer');
     }
@@ -794,6 +824,8 @@ export class TalentRoomViews {
         { merge: true },
       );
       if (res.agreed) await this.notifyMatch(id);
+      // The hub accepts the same approval twice, and a double click must not mail twice.
+      else if (record.approved?.[viewerSide] !== rawVersion) await this.notifyAttention(id, 'their_approval', [viewerSide === 'company' ? 'candidate' : 'company']);
       return { ok: true, agreed: Boolean(res.agreed) };
     } catch (err) {
       rethrowParlyError(err);
