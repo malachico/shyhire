@@ -1,38 +1,83 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { createRole, setRoleStatus } from '@/lib/actions/roles';
+import { createRole, readRoleDescription, setRoleStatus, updateRole } from '@/lib/actions/roles';
+import type { RoleDraft } from '@/lib/profiles';
+import type { Role } from '@/lib/roles';
+import type { WorkMode } from '@/lib/types';
 
-/** Describe a role once; the company's agent finds good fits and starts talking to them. */
-export function RoleForm({ first }: { first: boolean }) {
+const WORK_MODES: { mode: WorkMode; label: string }[] = [{ mode: 'remote', label: 'Remote' }, { mode: 'hybrid', label: 'Hybrid' }, { mode: 'onsite', label: 'Onsite' }];
+const BLANK: RoleDraft = { title: '', looking: '', location: '', workModes: [], comp: '', mustHaves: '' };
+
+/** Describe a role once, or paste its job description; the company's agent finds good fits and starts talking to them. With `role`, edits it. */
+export function RoleForm({ first = false, role }: { first?: boolean; role?: Pick<Role, 'id' | 'title' | 'looking' | 'location' | 'workModes' | 'comp' | 'mustHaves'> }) {
   const router = useRouter();
-  const [open, setOpen] = useState(first);
+  const [open, setOpen] = useState(first || !!role);
   const [pending, start] = useTransition();
+  const [reading, startReading] = useTransition();
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
+  const [pasted, setPasted] = useState('');
+  const [filled, setFilled] = useState(false);
+  const [draft, setDraft] = useState<RoleDraft>(role ? { ...BLANK, ...role } : BLANK);
+  // The fields stay uncontrolled: a new version remounts them with the new draft.
+  const [version, setVersion] = useState(0);
+  const fill = (next: RoleDraft) => { setDraft(next); setVersion((v) => v + 1); };
   if (!open) return <button type="button" className="btn-primary" onClick={() => setOpen(true)}>+ New role</button>;
-  return <form className="card space-y-4" onSubmit={(e) => {
+  return <form className={role ? 'mt-3 space-y-4' : 'card space-y-4'} onSubmit={(e) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
-    const body = { title: String(f.get('title') ?? ''), looking: String(f.get('looking') ?? ''), comp: String(f.get('comp') ?? ''), mustHaves: String(f.get('mustHaves') ?? '') };
+    const body: RoleDraft = { title: String(f.get('title') ?? ''), looking: String(f.get('looking') ?? ''), location: String(f.get('location') ?? ''), workModes: f.getAll('workModes') as WorkMode[], comp: String(f.get('comp') ?? ''), mustHaves: String(f.get('mustHaves') ?? '') };
     setError(''); setDone('');
     start(async () => {
+      if (role) {
+        const r = await updateRole(role.id, body);
+        if (r.error) { setError(r.error); return; }
+        setDone('Saved.'); router.refresh();
+        return;
+      }
       const r = await createRole(body);
       if ('error' in r && r.error) { setError(r.error); return; }
       const n = 'opened' in r ? r.opened ?? 0 : 0;
       setDone(n ? `Your agent started ${n} conversation${n === 1 ? '' : 's'}. You'll hear when someone needs you.` : "Role is open. No strong fits yet; your agent checks again every day.");
-      setOpen(first); router.refresh();
+      setOpen(first); fill(BLANK); setFilled(false); router.refresh();
     });
   }}>
-    <div><h2 className="font-semibold">New role</h2><p className="muted text-sm">Your agent talks to the best fits now, then a few more each day. You only hear when it needs you or there&apos;s a mutual yes.</p></div>
-    <label className="field">Role title<input className="input" name="title" required maxLength={200} placeholder="Senior backend engineer" /></label>
-    <label className="field">Who you&apos;re looking for<textarea className="input min-h-24" name="looking" required maxLength={2000} placeholder="Payments or fintech background, Go and Postgres in production, remote within EU hours" /></label>
-    <label className="field">Salary<input className="input" name="comp" maxLength={200} placeholder="e.g. 150–200k ILS, flexible · or $180k–$210k + equity" /><span className="hint block">Free text, recommended.</span></label>
-    <label className="field">Private notes for your agent<textarea className="input min-h-20" name="mustHaves" maxLength={2000} placeholder="Must be able to start within 2 months. Can stretch to $210k for someone exceptional." /><span className="hint block">Only your agent sees these.</span></label>
+    {role
+      ? <p className="muted text-sm">Changes apply to new conversations only.</p>
+      : <>
+        <div><h2 className="font-semibold">New role</h2><p className="muted text-sm">Your agent talks to the best fits now, then a few more each day. You only hear when it needs you or there&apos;s a mutual yes.</p></div>
+        <details>
+          <summary className="cursor-pointer text-sm font-medium">Have a job description? Paste it</summary>
+          <div className="mt-2 space-y-2">
+            <textarea aria-label="Job description" className="input min-h-32" maxLength={40000} value={pasted} onChange={(e) => setPasted(e.target.value)} />
+            <button type="button" className="underline underline-offset-4 text-sm" disabled={reading || !pasted.trim()} onClick={() => {
+              setError(''); setFilled(false);
+              startReading(async () => {
+                const r = await readRoleDescription(pasted);
+                if ('draft' in r) { fill(r.draft); setPasted(''); setFilled(true); } else setError(r.error);
+              });
+            }}>{reading ? 'Reading…' : 'Fill in the form'}</button>
+            <p className="hint">We read it once and don&apos;t keep it.</p>
+          </div>
+        </details>
+        {filled && <p role="status" className="text-sm">Check each field below, and take out anything that names your company. Nothing happens until you press Start.</p>}
+      </>}
+    <div key={version} className="space-y-4">
+      <label className="field">Role title<input className="input" name="title" required maxLength={200} defaultValue={draft.title} placeholder="Senior backend engineer" /></label>
+      <label className="field">Who you&apos;re looking for<textarea className="input min-h-24" name="looking" required maxLength={2000} defaultValue={draft.looking} placeholder="Payments or fintech background, Go and Postgres in production, remote within EU hours" /></label>
+      <label className="field">Location<input className="input" name="location" maxLength={200} defaultValue={draft.location} placeholder="Tel Aviv, or EU time zones" /><span className="hint block">Your agent can share this with candidates.</span></label>
+      <fieldset className="field">
+        <legend>Work mode</legend>
+        <div className="flex flex-wrap gap-4">{WORK_MODES.map(({ mode, label }) => <label key={mode} className="flex items-center gap-2 text-sm"><input type="checkbox" name="workModes" value={mode} defaultChecked={draft.workModes.includes(mode)} />{label}</label>)}</div>
+      </fieldset>
+      <label className="field">Salary<input className="input" name="comp" maxLength={200} placeholder="e.g. 150–200k ILS, flexible · or $180k–$210k + equity" defaultValue={draft.comp} /><span className="hint block">Free text, recommended.</span></label>
+      <label className="field">Private notes for your agent<textarea className="input min-h-20" name="mustHaves" maxLength={2000} defaultValue={draft.mustHaves} placeholder="Must be able to start within 2 months. Can stretch to $210k for someone exceptional." /><span className="hint block">Only your agent sees these.</span></label>
+    </div>
     {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
     <div className="flex items-center gap-3">
-      <button className="btn-primary" disabled={pending}>{pending ? 'Finding fits…' : 'Start'}</button>
-      {!first && <button type="button" className="muted text-sm underline" onClick={() => setOpen(false)}>Cancel</button>}
+      <button className="btn-primary" disabled={pending}>{role ? (pending ? 'Saving…' : 'Save') : (pending ? 'Finding fits…' : 'Start')}</button>
+      {!first && !role && <button type="button" className="muted text-sm underline" onClick={() => setOpen(false)}>Cancel</button>}
     </div>
     {done && <p role="status" className="text-sm">{done}</p>}
   </form>;

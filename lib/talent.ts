@@ -1,6 +1,6 @@
 import type { Firestore } from '@google-cloud/firestore';
 import { db, DEFAULT_GCP_PROJECT_ID, gcpAccessToken } from './db.ts';
-import { firestoreLlmMeter, Profiles, vertexProfileImporter, vertexSummaryWriter } from './profiles.ts';
+import { firestoreLlmMeter, Profiles, vertexProfileImporter, vertexRoleReader, vertexSummaryWriter } from './profiles.ts';
 import { parly } from './parly.ts';
 import { Roles } from './roles.ts';
 import { roomViews } from './roomViews.ts';
@@ -37,6 +37,7 @@ export function createProfiles(
     };
     instance.importer = vertexProfileImporter(opts);
     instance.summarizer = vertexSummaryWriter(opts);
+    instance.roleReader = vertexRoleReader(opts);
   }
   return instance;
 }

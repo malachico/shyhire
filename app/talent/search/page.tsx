@@ -35,7 +35,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
       <RoleForm first={!list.length} />
       {list.map((r) => <section key={r.id} aria-label={r.title} className="card space-y-3">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0"><h2 className="font-semibold">{r.title}</h2><p className="muted line-clamp-2 text-sm">{r.looking}</p></div>
+          <div className="min-w-0"><h2 className="font-semibold">{r.title}</h2>{(r.location || !!r.workModes?.length) && <p className="muted text-sm capitalize">{[r.location, ...(r.workModes ?? [])].filter(Boolean).join(' · ')}</p>}<p className="muted line-clamp-2 text-sm">{r.looking}</p></div>
           <span className={`pill shrink-0 ${r.status === 'open' ? 'pill-good' : ''}`}>{r.status === 'open' ? 'Finding fits' : 'Paused'}</span>
         </div>
         <div className="flex flex-wrap gap-1.5 text-sm">
@@ -45,6 +45,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
           <span className="pill">{r.contacted.length} contacted</span>
         </div>
         <div className="flex items-center justify-between gap-3"><a href="/talent/conversations" className="text-sm font-medium underline underline-offset-4">Conversations</a><RoleActions id={r.id} status={r.status} /></div>
+        <details><summary className="cursor-pointer text-sm font-medium">Edit</summary><RoleForm role={r} /></details>
       </section>)}
       <form action="/talent/search" className="flex gap-2 pt-4">
         <input className="input min-w-0 flex-1 text-sm" name="q" maxLength={1000} required aria-label="Browse candidates" placeholder="Or browse candidates yourself…" />

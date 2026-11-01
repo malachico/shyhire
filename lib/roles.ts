@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { FieldValue, type Firestore } from '@google-cloud/firestore';
 import { db } from './db.ts';
-import { callerOf, TalentError, text, verifiedDomains, type Profiles, type TalentCaller, type TalentProfile } from './profiles.ts';
+import { callerOf, parseWorkModes, RateLimiter, TalentError, text, verifiedDomains, type Profiles, type RoleDraft, type TalentCaller, type TalentProfile, type WorkMode } from './profiles.ts';
 import type { CompanyRoomSummary, TalentRoomViews } from './roomViews.ts';
 
 /** A company's standing role: its agent keeps finding good fits and talking to them until it's paused or closed. */
@@ -12,6 +12,9 @@ export interface Role {
   title: string;
   /** What they look for, in their words: what search ranks candidates against. */
   looking: string;
+  /** Absent on roles from before these fields. */
+  location?: string;
+  workModes?: WorkMode[];
   comp: string;
   /** Private to their agent. */
   mustHaves: string;
@@ -34,8 +37,19 @@ export const MIN_FIT = 60;
 // A little under a day, so the daily cron never skips a role that was filled a few minutes later yesterday.
 const DAY_MS = 20 * 60 * 60 * 1000;
 
+/** What a company writes about a role, checked. */
+function roleFields(raw: unknown): RoleDraft {
+  const body = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const title = text(body.title ?? '', 200, 'title');
+  const looking = text(body.looking ?? '', 2000, 'What you look for');
+  if (!title) throw new TalentError('invalid', 'Enter the role title');
+  if (!looking) throw new TalentError('invalid', 'Describe who you are looking for');
+  return { title, looking, location: text(body.location ?? '', 200, 'location'), workModes: parseWorkModes(body.workModes ?? []), comp: text(body.comp ?? '', 200, 'comp'), mustHaves: text(body.mustHaves ?? '', 2000, 'mustHaves') };
+}
+
 export class Roles {
   private readonly col;
+  private readonly readLimiter = new RateLimiter(5, 60 * 60_000, 'role imports');
   private readonly profiles: Profiles;
   private readonly rooms: TalentRoomViews;
   constructor(profiles: Profiles, rooms: TalentRoomViews, store: Firestore = db()) {
@@ -46,26 +60,31 @@ export class Roles {
 
   async create(caller: TalentCaller, raw: unknown): Promise<{ role: Role; opened: number }> {
     const { id: companyId } = callerOf(caller);
-    const body = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-    const title = text(body.title ?? '', 200, 'title');
-    const looking = text(body.looking ?? '', 2000, 'What you look for');
-    if (!title) throw new TalentError('invalid', 'Enter the role title');
-    if (!looking) throw new TalentError('invalid', 'Describe who you are looking for');
-    const own = (await this.profiles.get(companyId)) as TalentProfile | undefined;
-    const domains = verifiedDomains(own?.verified ?? []);
-    if (!domains.length) throw new TalentError('forbidden', 'Verify your work email before opening a role');
+    const fields = roleFields(raw);
+    const domains = await this.domainsOf(companyId);
     const now = new Date().toISOString();
     const ref = this.col.doc(randomUUID());
-    const role: Role = { id: ref.id, companyId, companyName: domains[0]!, title, looking, comp: text(body.comp ?? '', 200, 'comp'), mustHaves: text(body.mustHaves ?? '', 2000, 'mustHaves'), status: 'open', contacted: [], createdAt: now, updatedAt: now };
+    const role: Role = { id: ref.id, companyId, companyName: domains[0]!, ...fields, status: 'open', contacted: [], createdAt: now, updatedAt: now };
     await ref.set(role);
     return { role, opened: await this.fill(ref.id, FIRST_FILL) };
+  }
+
+  /** Fills the role form from a pasted job description; nothing is stored. */
+  async readDescription(caller: TalentCaller, raw: unknown): Promise<RoleDraft> {
+    const { id } = callerOf(caller);
+    const description = text(raw, 40000, 'Job description');
+    if (!description) throw new TalentError('invalid', 'Paste the job description first');
+    await this.domainsOf(id);
+    if (!this.profiles.roleReader) throw new TalentError('unsupported', 'Reading job descriptions is not available right now. Fill in the form yourself.');
+    this.readLimiter.hit(id);
+    return this.profiles.roleReader(id, description);
   }
 
   /** Finds good fits not yet contacted and opens a conversation with each, up to `max`. Answers how many it opened. */
   async fill(roleId: string, max: number): Promise<number> {
     const role = (await this.col.doc(roleId).get()).data() as Role | undefined;
     if (!role || role.status !== 'open') return 0;
-    const { profiles } = await this.profiles.search(role.companyId, [role.title, role.looking, role.mustHaves].filter(Boolean).join('. '));
+    const { profiles } = await this.profiles.search(role.companyId, [role.title, role.location, role.workModes?.join(', '), role.looking, role.mustHaves].filter(Boolean).join('. ').slice(0, 1000));
     // Anyone this company already talks to, for any role, isn't contacted again.
     const busy = new Set([...role.contacted, ...(await this.rooms.listCompanyRooms(role.companyId)).map((r) => r.candidateAlias)]);
     // ponytail: keyword-search results have no score, so they never auto-open; only the AI search does.
@@ -73,7 +92,7 @@ export class Roles {
     let opened = 0;
     for (const p of picks) {
       try {
-        await this.rooms.openRoom(role.companyId, { candidateAlias: p.alias, roleId, brief: { role: role.title, comp: role.comp, mustHaves: [role.looking, role.mustHaves].filter(Boolean).join('\n') } });
+        await this.rooms.openRoom(role.companyId, { candidateAlias: p.alias, roleId, brief: { role: role.title, comp: role.comp, mustHaves: [role.looking, role.mustHaves].filter(Boolean).join('\n'), location: role.location, workModes: role.workModes } });
         await this.col.doc(roleId).update({ contacted: FieldValue.arrayUnion(p.alias) });
         opened++;
       } catch (err) {
@@ -106,13 +125,30 @@ export class Roles {
   }
 
   async setStatus(caller: TalentCaller, roleId: string, status: unknown): Promise<void> {
-    const { id } = callerOf(caller);
     if (status !== 'open' && status !== 'paused' && status !== 'closed') throw new TalentError('invalid', 'Status is open, paused or closed');
+    await (await this.owned(caller, roleId)).update({ status, updatedAt: new Date().toISOString() });
+  }
+
+  /** Conversations already started keep the brief they opened with; new ones use this. */
+  async update(caller: TalentCaller, roleId: string, raw: unknown): Promise<void> {
+    const fields = roleFields(raw);
+    await (await this.owned(caller, roleId)).update({ ...fields, updatedAt: new Date().toISOString() });
+  }
+
+  private async domainsOf(companyId: string): Promise<string[]> {
+    const own = (await this.profiles.get(companyId)) as TalentProfile | undefined;
+    const domains = verifiedDomains(own?.verified ?? []);
+    if (!domains.length) throw new TalentError('forbidden', 'Verify your work email before opening a role');
+    return domains;
+  }
+
+  private async owned(caller: TalentCaller, roleId: string) {
+    const { id } = callerOf(caller);
     if (typeof roleId !== 'string' || !/^[a-f0-9-]{36}$/.test(roleId)) throw new TalentError('not_found', 'No such role');
     const ref = this.col.doc(roleId);
     const role = (await ref.get()).data() as Role | undefined;
     if (!role || role.companyId !== id) throw new TalentError('not_found', 'No such role');
-    await ref.update({ status, updatedAt: new Date().toISOString() });
+    return ref;
   }
 }
 

@@ -80,9 +80,11 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
 
     {ended && <section className="card mt-6"><p className="font-medium">This conversation ended.</p><p className="muted mt-1 text-sm">No contact details were shared.</p></section>}
 
-    {isCompany && room.brief && (room.brief.comp || room.brief.mustHaves) && <details className="mt-6">
+    {isCompany && room.brief && (room.brief.comp || room.brief.mustHaves || room.brief.location || room.brief.workModes?.length) && <details className="mt-6">
       <summary className="cursor-pointer text-sm font-medium">Your private brief</summary>
       <dl className="mt-3 space-y-2 text-sm">
+        {room.brief.location && <div><dt className="muted text-xs">Location</dt><dd>{room.brief.location}</dd></div>}
+        {!!room.brief.workModes?.length && <div><dt className="muted text-xs">Work mode</dt><dd className="capitalize">{room.brief.workModes.join(', ')}</dd></div>}
         {room.brief.comp && <div><dt className="muted text-xs">Salary</dt><dd>{room.brief.comp}</dd></div>}
         {room.brief.mustHaves && <div><dt className="muted text-xs">Must-haves</dt><dd className="whitespace-pre-wrap">{room.brief.mustHaves}</dd></div>}
       </dl>

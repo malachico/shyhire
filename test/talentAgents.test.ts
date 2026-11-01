@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { testDb } from '../lib/db.ts';
 import { Profiles } from '../lib/profiles.ts';
 import { candidateAgentKey, TalentRoomViews, type ParlyRoomsClient } from '../lib/roomViews.ts';
+import { createProfiles } from '../lib/talent.ts';
 
 const client = () => {
   const agents = new Map<string, { name: string; instructions: string; card?: string; listed?: boolean }>();
@@ -83,5 +84,69 @@ describe('Standing roles', () => {
     await roles.setStatus(co, role.id, 'paused');
     assert.equal(await roles.fill(role.id, 3), 0);
     await assert.rejects(roles.setStatus({ id: 'r-a', kind: 'human' }, role.id, 'open'), /No such role/);
+  });
+
+  it('carries location and work mode into the search and the company brief, and only the owner edits a role', async () => {
+    const { Roles } = await import('../lib/roles.ts');
+    const db = testDb(), profiles = new Profiles(db), { c, opened } = client(), views = new TalentRoomViews(db, c);
+    const cand = await profiles.save({ id: 'l-a', kind: 'human' }, { version: 0, headline: 'Go', facts: ['Go engineer'] });
+    const co = { id: 'l-co', kind: 'human' as const }, other = { id: 'l-other', kind: 'human' as const };
+    await profiles.verify(co.id, { id: 'work-email:acme.test', source: 'work-email', label: 'w', verifiedAt: new Date().toISOString(), data: { domain: 'acme.test' } });
+    const queries: string[] = [];
+    profiles.agentSearch = async (q) => { queries.push(q); return [{ key: candidateAgentKey(cand.alias), score: 90, why: '' }]; };
+    const roles = new Roles(profiles, views, db);
+    await assert.rejects(roles.create(co, { title: 'Go', looking: 'Go', workModes: ['moon'] }), /workModes/);
+    const { role } = await roles.create(co, { title: 'Go engineer', looking: 'Payments', location: 'Tel Aviv, acme.test HQ', workModes: ['onsite', 'hybrid'] });
+    assert.match(queries[0]!, /Tel Aviv.*hybrid.*onsite/);
+    const brief = opened[0]!.sides.find((s) => s.ref === 'company')!.brief;
+    assert.match(brief, /Location: Tel Aviv, \[employer\] HQ/);
+    assert.match(brief, /Work mode: hybrid, onsite/);
+
+    const edit = { title: 'Staff Go engineer', looking: 'Payments', location: 'Haifa', workModes: ['remote'], comp: '', mustHaves: '' };
+    await assert.rejects(roles.update(other, role.id, edit), /No such role/);
+    await assert.rejects(roles.update(co, role.id, { ...edit, title: '' }), /role title/);
+    await roles.update(co, role.id, edit);
+    const [view] = await roles.list(co);
+    assert.equal(view!.title, 'Staff Go engineer'); assert.equal(view!.location, 'Haifa'); assert.deepEqual(view!.workModes, ['remote']);
+    assert.equal(view!.contacted.length, 1); // what's already started stays
+  });
+
+  it('opens with the longest role the form accepts', async () => {
+    const { Roles } = await import('../lib/roles.ts');
+    const db = testDb(), profiles = new Profiles(db), { c, opened } = client(), views = new TalentRoomViews(db, c);
+    const cand = await profiles.save({ id: 'm-a', kind: 'human' }, { version: 0, headline: 'Go', facts: ['Go engineer'] });
+    const co = { id: 'm-co', kind: 'human' as const };
+    await profiles.verify(co.id, { id: 'work-email:acme.test', source: 'work-email', label: 'w', verifiedAt: new Date().toISOString(), data: { domain: 'acme.test' } });
+    profiles.agentSearch = async () => [{ key: candidateAgentKey(cand.alias), score: 90, why: '' }];
+    const { opened: n } = await new Roles(profiles, views, db).create(co, { title: 'Go', looking: 'x'.repeat(2000), mustHaves: 'y'.repeat(2000) });
+    assert.equal(n, 1); assert.equal(opened.length, 1);
+  });
+
+  it('reads a pasted job description into form fields, keeping only what the form accepts', async () => {
+    const { Roles } = await import('../lib/roles.ts');
+    const db = testDb(), fetched: string[] = [];
+    const reply = { title: 'Go engineer', looking: 'x'.repeat(3000), location: 'Haifa', workModes: ['hybrid', 'moon'], comp: 7, mustHaves: 'Visa', extra: 'dropped' };
+    const profiles = createProfiles(db, {
+      accessToken: async () => 'test-token',
+      fetchImpl: (async (_url: string, init: RequestInit) => {
+        fetched.push(String(init.body));
+        return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(reply) }] } }] }));
+      }) as typeof fetch,
+    });
+    const roles = new Roles(profiles, new TalentRoomViews(db, client().c), db);
+    const me = { id: 'd-co', kind: 'human' as const };
+    await assert.rejects(roles.readDescription(me, 'Acme wants a Go engineer'), /Verify your work email/);
+    assert.equal(fetched.length, 0);
+    await profiles.verify(me.id, { id: 'work-email:acme.test', source: 'work-email', label: 'w', verifiedAt: new Date().toISOString(), data: { domain: 'acme.test' } });
+    await assert.rejects(roles.readDescription(me, ' '), /Paste the job description/);
+    await assert.rejects(roles.readDescription(me, 'x'.repeat(40001)), /at most 40000/);
+    const draft = await roles.readDescription(me, 'Acme wants a Go engineer');
+    assert.deepEqual(draft, { title: 'Go engineer', looking: 'x'.repeat(2000), location: 'Haifa', workModes: ['hybrid'], comp: '', mustHaves: 'Visa' });
+    assert.match(fetched[0]!, /Acme wants a Go engineer/);
+    assert.match(fetched[0]!, /untrusted data/);
+    assert.match(fetched[0]!, /never include the company name/);
+    for (let i = 0; i < 4; i++) await roles.readDescription(me, 'again');
+    await assert.rejects(roles.readDescription(me, 'too many'), { code: 'rate_limited' });
+    await assert.rejects(new Roles(new Profiles(db), new TalentRoomViews(db, client().c), db).readDescription(me, 'text'), { code: 'unsupported' });
   });
 });
