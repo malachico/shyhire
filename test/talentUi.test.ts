@@ -79,6 +79,8 @@ describe('Shyhire UI support', () => {
 
   it('checking a profile reports what saving would refuse, and neither saves nor lists the candidate', async () => {
     const profiles = new Profiles(testDb());
+    let published = 0;
+    profiles.onChange = async () => { published++; };
     const cand = { id: 'g-cand-check', kind: 'human' as const };
     const role = { title: 'Backend engineer', company: 'Acme', description: 'Go', start: '2020', end: '2025' };
     await assert.rejects(profiles.save(cand, { version: 0, headline: 'Backend engineer', facts: [{ text: 'Built payments at Acme' }], experience: [role] }, {}, true), /mentions Acme/);
@@ -87,6 +89,7 @@ describe('Shyhire UI support', () => {
     assert.equal(stored.version, 0);
     assert.equal(stored.headline, '');
     assert.notEqual(stored.searchable, true);
+    assert.equal(published, 0);
   });
 
   it('warns about a name, email, link or blocked employer in the candidate text', () => {

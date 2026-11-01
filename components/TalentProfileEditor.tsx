@@ -48,6 +48,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   const [error, setError] = useState(initialError ?? '');
   const [notice, setNotice] = useState('');
   const [justFinished, setJustFinished] = useState(false);
+  const [rewriteError, setRewriteError] = useState('');
   const [editing, setEditing] = useState<'' | 'facts' | 'experience' | 'import' | 'prefs'>('');
   const onboarded = saved.version > 0;
   const change = (f: Partial<TalentProfile>) => { setProfile((p) => ({ ...p, ...f })); setNotice(''); };
@@ -104,13 +105,13 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   }
 
   async function rewrite() {
-    setBusy(true); setError('');
+    setBusy(true); setRewriteError('');
     try {
       const { headline, about, experience, openTo, details } = profile;
       const r = await writeSummary({ headline, about, experience, openTo, ...(details ? { details } : {}) });
-      if ('error' in r && r.error) setError(r.error);
+      if ('error' in r && r.error) setRewriteError(r.error);
       else if ('facts' in r) change({ facts: r.facts });
-    } catch { setError('Could not write it. Try again, or write it yourself.'); }
+    } catch { setRewriteError('Could not write it. Try again, or write it yourself.'); }
     finally { setBusy(false); }
   }
 
@@ -144,7 +145,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
     </> : <p className="muted text-sm">CV import isn&apos;t available right now. Fill in your profile by hand.</p>}
     <p className="muted text-sm">
       {githubAvailable && <><a className="link" href="/talent/auth/github/start">Connect GitHub</a> to add your public activity (personal account only) · </>}
-      <button className="underline" onClick={() => setStep(2)}>Fill it in by hand</button>
+      <button className="underline" onClick={() => { setError(''); setStep(2); }}>Fill it in by hand</button>
     </p>
   </section>;
 
@@ -222,6 +223,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
         {profile.facts.length < 10 && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => change({ facts: [...profile.facts, { id: crypto.randomUUID(), text: '', source: 'cv' }] })}>+ Add a fact</button>}
         {importAvailable && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => void rewrite()}>{busy ? 'Writing…' : '✨ Write with AI'}</button>}
       </div>
+      {rewriteError && <p role="alert" className="mt-3 rounded-lg bg-[var(--bad-bg)] p-3 text-sm text-[var(--bad-fg)]">{rewriteError}</p>}
     </div>
     {!!leaks.length && <p role="alert" className="rounded-lg bg-[#fffaeb] p-3 text-sm text-[#93370d]">This mentions {leaks.join(', ')}. Companies see these facts, so remove it before saving.</p>}
   </section>;
@@ -234,7 +236,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       <h1 className="mt-6 text-2xl font-semibold tracking-tight">{titles[step]}</h1>
       <div className="mt-6">{step === 1 && banner}</div>
       {step === 1 && experienceStep}
-      {step === 2 && <div className="space-y-6">{factsEditor}{profileFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void checkStep2()}>{busy ? 'Checking…' : 'Continue'}</button><button className="muted text-sm underline" onClick={() => { setError(''); setStep(1); }}>Back</button></div></div></div>}
+      {step === 2 && <div className="space-y-6">{factsEditor}{profileFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void checkStep2()}>{busy ? 'Checking…' : 'Continue'}</button><button className="muted text-sm underline" disabled={busy} onClick={() => { setError(''); setStep(1); }}>Back</button></div></div></div>}
       {step === 3 && <div className="space-y-6">{preferenceFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Start getting matched'}</button><button className="muted text-sm underline" onClick={() => { setError(''); setStep(2); }}>Back</button></div></div></div>}
     </main>;
   }
@@ -267,10 +269,10 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
         <span className={`relative h-6 w-10 rounded-full transition-colors ${saved.paused ? 'bg-[var(--border)]' : 'bg-[#12b76a]'}`}><span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${saved.paused ? 'left-0.5' : 'left-[18px]'}`} /></span>
       </button>
     </div>
-    {justFinished && <section aria-label="What happens next" className="card space-y-2">
+    {justFinished && !saved.paused && <section aria-label="What happens next" className="card space-y-2">
       <h2 className="font-semibold">You&apos;re in. Your part is done for now.</h2>
       <p className="text-sm">Companies can now find your anonymous profile. Your agent talks to them for you, without your name or employers.</p>
-      <p className="text-sm">When a company&apos;s agent wants to talk with you, it shows up in <Link href="/talent/conversations" className="underline underline-offset-4">Conversations</Link>, with a dot on the tab. You decide what happens next.</p>
+      <p className="text-sm">When a company&apos;s agent wants to talk with you, it shows up in <Link href="/talent/conversations" className="underline underline-offset-4">Conversations</Link>. You decide what happens next.</p>
     </section>}
     {banner}
     {editing === 'facts' ? factsEditor : preview}
