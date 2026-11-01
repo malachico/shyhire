@@ -59,7 +59,7 @@ export function CandidateResults({ results, query, existing }: { results: Candid
           <Mark size={44} />
           <div>
             <h2 id="talk-title" className="text-lg font-semibold">Talk to {alias}</h2>
-            <p className="muted text-sm">Only your agent sees this. The candidate sees your company name.</p>
+            <p className="muted text-sm">Only your agent sees this. The candidate sees your company name only once you both approve.</p>
           </div>
         </div>
         <label className="field">Role<input className="input" value={role} onChange={(e) => setRole(e.target.value)} maxLength={200} required placeholder="Senior backend engineer" /></label>

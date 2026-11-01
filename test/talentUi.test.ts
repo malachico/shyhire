@@ -57,7 +57,7 @@ describe('Shyhire UI support', () => {
     const client: ParlyRoomsClient = { getRoom: async () => { throw new Error('unused'); }, messages: async () => ({ messages: [] }), decide: async () => ({ ok: true }), approve: async () => ({ ok: true, agreed: false }) };
     const views = new TalentRoomViews(db, client);
     const rows = await views.listConversations('g-me');
-    assert.deepEqual(rows.map((r) => [r.id, r.side, r.title, r.needsMe]), [['offer-asks', 'candidate', 'acme.dev', true], ['hiring-old', 'company', 'Candidate #a1b2c3d4', false]]);
+    assert.deepEqual(rows.map((r) => [r.id, r.side, r.title, r.needsMe]), [['offer-asks', 'candidate', 'A verified company', true], ['hiring-old', 'company', 'Candidate #a1b2c3d4', false]]);
     assert.equal(await views.waitingCount('g-me'), 1);
 
     await col.doc('hiring-old').set({ documentVersion: 2 }, { merge: true });

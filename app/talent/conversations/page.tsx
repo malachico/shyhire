@@ -37,7 +37,7 @@ export default async function Conversations() {
         return <li key={r.id}><a href={`/talent/conversations/${encodeURIComponent(r.id)}`} className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-[var(--bg)]">
           <span className="min-w-0">
             <span className="block truncate font-medium">{r.title || 'Conversation'}</span>
-            <span className="muted block truncate text-sm">{r.side === 'company' ? `You're hiring${r.role ? ` · ${r.role}` : ''}` : 'Wants to talk with you'}</span>
+            <span className="muted block truncate text-sm">{r.side === 'company' ? `You're hiring${r.role ? ` · ${r.role}` : ''}` : `Wants to talk with you${r.role ? ` · ${r.role}` : ''}`}</span>
           </span>
           <span className={pillClass(s.tone)}>{s.label}</span>
         </a></li>;
