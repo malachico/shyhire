@@ -20,7 +20,7 @@
 body { background: var(--bg); color: var(--fg); font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif; font-size: 15px; }
 .btn-primary { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; padding: 0 1.25rem; border-radius: 14px; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 .btn-primary:hover { background: var(--accent-hover); }
-.btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 1rem; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); }
+.btn { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; padding: 0 1rem; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); }
 .input { min-height: 46px; box-sizing: border-box; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); padding: 0.625rem 0.75rem; }
 
 .btn:disabled, .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }

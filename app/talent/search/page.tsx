@@ -6,6 +6,7 @@ import { statusOf } from '@/lib/status';
 import { profiles, roles, type CandidateSearch } from '@/lib/talent';
 import { RoleActions, RoleForm } from '@/components/Roles';
 import { CandidateResults } from '@/components/CandidateResults';
+import { SearchForm } from '@/components/SearchForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,10 +48,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
         <div className="flex items-center justify-between gap-3"><a href="/talent/conversations" className="text-sm font-medium underline underline-offset-4">Conversations</a><RoleActions id={r.id} status={r.status} /></div>
         <details><summary className="cursor-pointer text-sm font-medium">Edit</summary><RoleForm role={r} /></details>
       </section>)}
-      <form action="/talent/search" className="flex gap-2 pt-4">
-        <input className="input min-w-0 flex-1 text-sm" name="q" maxLength={1000} required aria-label="Browse candidates" placeholder="Or browse candidates yourself…" />
-        <button className="btn text-sm" type="submit">Browse</button>
-      </form>
+      <SearchForm formClass="flex gap-2 pt-4" className="input min-w-0 flex-1 text-sm" aria-label="Browse candidates" placeholder="Or browse candidates yourself…" button="Browse" buttonClass="btn text-sm" />
     </main>;
   }
   // The candidates this person already talks to: their card shows that conversation instead of "Talk".
@@ -58,10 +56,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
   const existing = Object.fromEntries((await roomViews().listCompanyRooms(session.sub).catch(() => [])).reverse().map((r) => [r.candidateAlias, { id: r.id, label: statusOf(r.status, { needsMe: !!r.needsDecision, summaryReady: r.documentVersion !== undefined, iApproved: r.iApproved }).label }]));
   const list = (await roles().list(session.sub)).map(({ id, title, status }) => ({ id, title, status }));
   return <main className="mx-auto max-w-3xl px-4 py-8">
-    <form action="/talent/search" className="flex gap-2">
-      <input className="input min-w-0 flex-1" name="q" maxLength={1000} required defaultValue={q} aria-label="Describe the role" placeholder="Describe the role, e.g. backend engineer, Go, Postgres" />
-      <button className="btn-primary" type="submit">Find</button>
-    </form>
+    <SearchForm formClass="flex gap-2" className="input min-w-0 flex-1" defaultValue={q} aria-label="Describe the role" placeholder="Describe the role, e.g. backend engineer, Go, Postgres" button="Find" buttonClass="btn-primary" />
     {error && <p role="alert" className="mt-6 text-sm text-[var(--bad-fg)]">{error}</p>}
     <a href="/talent/search" className="muted mb-4 inline-block text-sm">← Roles</a>
     {results && <CandidateResults results={results} query={q} existing={existing} roles={list} />}

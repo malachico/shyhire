@@ -5,6 +5,7 @@ import { createRole, createRoleAndTalk, readRoleDescription, setRoleStatus, upda
 import type { RoleDraft } from '@/lib/profiles';
 import type { Role } from '@/lib/roles';
 import type { WorkMode } from '@/lib/types';
+import { Spinner } from './SearchForm';
 
 const WORK_MODES: { mode: WorkMode; label: string }[] = [{ mode: 'remote', label: 'Remote' }, { mode: 'hybrid', label: 'Hybrid' }, { mode: 'onsite', label: 'Onsite' }];
 const BLANK: RoleDraft = { title: '', looking: '', location: '', workModes: [], comp: '', mustHaves: '' };
@@ -55,14 +56,14 @@ export function RoleForm({ first = false, role, talk }: { first?: boolean; role?
         <details>
           <summary className="cursor-pointer text-sm font-medium">Have a job description? Paste it</summary>
           <div className="mt-2 space-y-2">
-            <textarea aria-label="Job description" className="input min-h-32" maxLength={40000} value={pasted} onChange={(e) => setPasted(e.target.value)} />
-            <button type="button" className="underline underline-offset-4 text-sm" disabled={reading || !pasted.trim()} onClick={() => {
+            <textarea aria-label="Job description" className="input block w-full" rows={8} maxLength={40000} value={pasted} onChange={(e) => setPasted(e.target.value)} />
+            <button type="button" className="btn text-sm" disabled={reading || !pasted.trim()} onClick={() => {
               setError(''); setFilled(false);
               startReading(async () => {
                 const r = await readRoleDescription(pasted);
                 if ('draft' in r) { fill(r.draft); setPasted(''); setFilled(true); } else setError(r.error);
               });
-            }}>{reading ? 'Reading…' : 'Fill in the form'}</button>
+            }}>{reading ? <><Spinner />Reading…</> : 'Fill in the form'}</button>
             <p className="hint">We read it once and don&apos;t keep it.</p>
           </div>
         </details>
