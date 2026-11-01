@@ -6,6 +6,7 @@ import { appUrl } from '@/lib/github';
 import { GOOGLE_FLOW_COOKIE, googleClient, googleConfigured } from '@/lib/google';
 import { homeOf, parseMode, setMode } from '@/lib/mode';
 import { TalentError } from '@/lib/profiles';
+import { profiles } from '@/lib/talent';
 
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const back = (msg: string) => NextResponse.redirect(`${appUrl()}/?error=${encodeURIComponent(msg)}`, 303);
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
     if (!flow?.state || !flow.nonce || !state || !same(flow.state, state)) throw new Error('Invalid sign-in state');
     const account = await googleClient().identity(idToken, flow.nonce);
     await startSession({ sub: account.sub, email: account.email, ...(account.name ? { name: account.name } : {}) });
+    await Promise.resolve().then(() => profiles().recordContact(account.sub, { loginEmail: account.email })).catch(() => {}); // Only for match emails: never blocks sign-in.
     const mode = parseMode(flow.mode);
     await setMode(mode);
     return NextResponse.redirect(`${appUrl()}${homeOf(mode)}`, 303);

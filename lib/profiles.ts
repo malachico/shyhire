@@ -710,7 +710,7 @@ export class Profiles {
   }
   async recordContact(
     personId: string,
-    contact: { githubLogin?: string; workEmail?: string; domain?: string },
+    contact: { githubLogin?: string; workEmail?: string; domain?: string; loginEmail?: string },
     transaction?: Transaction,
   ): Promise<void> {
     if (typeof personId !== 'string' || !personId.trim()) return;
@@ -720,6 +720,8 @@ export class Profiles {
     if (typeof contact.githubLogin === 'string' && contact.githubLogin.trim()) payload.githubLogin = contact.githubLogin.trim();
     if (typeof contact.workEmail === 'string' && contact.workEmail.trim()) payload.workEmail = contact.workEmail.trim().toLowerCase();
     if (typeof contact.domain === 'string' && contact.domain.trim()) payload.domain = contact.domain.trim().toLowerCase();
+    // Private: where we mail this person. Never revealed to the other side, unlike workEmail.
+    if (typeof contact.loginEmail === 'string' && contact.loginEmail.trim()) payload.loginEmail = contact.loginEmail.trim().toLowerCase();
     if (transaction) transaction.set(ref, payload, { merge: true });
     else await ref.set(payload, { merge: true });
   }
