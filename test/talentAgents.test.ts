@@ -111,6 +111,48 @@ describe('Standing roles', () => {
     assert.equal(view!.contacted.length, 1); // what's already started stays
   });
 
+  it('Talk opens one room about a role the recruiter owns, from the stored role, and never a second room', async () => {
+    const { Roles } = await import('../lib/roles.ts');
+    const db = testDb(), profiles = new Profiles(db), { c, opened } = client(), views = new TalentRoomViews(db, c);
+    const [a, b, d] = await Promise.all(['t-a', 't-b', 't-d'].map((id) => profiles.save({ id, kind: 'human' }, { version: 0, headline: 'Go', facts: ['Go engineer'] })));
+    const co = { id: 't-co', kind: 'human' as const }, other = { id: 't-other', kind: 'human' as const };
+    for (const [who, domain] of [[co, 'acme.test'], [other, 'other.test']] as const) await profiles.verify(who.id, { id: `work-email:${domain}`, source: 'work-email', label: 'w', verifiedAt: new Date().toISOString(), data: { domain } });
+    profiles.agentSearch = async () => [];
+    const roles = new Roles(profiles, views, db);
+    const { role } = await roles.create(co, { title: 'Go engineer', looking: 'Payments', comp: '$190k', mustHaves: 'Visa', location: 'Haifa', workModes: ['remote'] });
+    await assert.rejects(roles.talk(other, role.id, a!.alias), /No such role/);
+    assert.equal(opened.length, 0);
+
+    await roles.setStatus(co, role.id, 'paused'); // Choosing a paused role is still the recruiter's call.
+    const room = await roles.talk(co, role.id, a!.alias);
+    assert.equal(opened.length, 1);
+    assert.deepEqual(opened[0]!.metadata, { role_id: role.id });
+    assert.match(opened[0]!.sides.find((s) => s.ref === 'company')!.brief, /Go engineer[\s\S]*Haifa/);
+    assert.deepEqual((await roles.list(co))[0]!.contacted, [a!.alias]);
+    assert.deepEqual(await roles.talk(co, role.id, a!.alias), room); // A stale page or a double click.
+    assert.equal(opened.length, 1);
+
+    await roles.setStatus(co, role.id, 'closed');
+    await assert.rejects(roles.talk(co, role.id, b!.alias), /closed/);
+
+    // A new role from Talk: its first fill finds the same candidate, who still gets one room.
+    profiles.agentSearch = async () => [b!, d!].map((p) => ({ key: candidateAgentKey(p.alias), score: 90, why: '' }));
+    const made = await roles.create(co, { title: 'Staff Go engineer', looking: 'Payments' }, b!.alias);
+    assert.deepEqual(opened.slice(1).map((o) => o.sides.find((s) => s.ref === 'candidate')!.name), [b!.alias, d!.alias]);
+    assert.equal(made.opened, 1);
+    assert.ok(made.room);
+    assert.deepEqual([...(await roles.list(co))[0]!.contacted].sort(), [b!.alias, d!.alias].sort());
+
+    // Nothing started, so no role stays behind for a retry to double.
+    await assert.rejects(roles.create(co, { title: 'Ghost', looking: 'Payments' }, 'Candidate #00000000'), /candidate|not found|No such/i);
+    assert.deepEqual((await roles.list(co)).map((r) => r.title), ['Staff Go engineer']);
+    // The conversation exists even if the extra search fails.
+    const failing = Object.assign(Object.create(profiles), { search: async () => { throw new Error('search down'); } }) as Profiles;
+    const late = await profiles.save({ id: 't-e', kind: 'human' }, { version: 0, headline: 'Go', facts: ['Go engineer'] });
+    const { room: kept, opened: extra } = await new Roles(failing, views, db).create(co, { title: 'Late', looking: 'Payments' }, late.alias);
+    assert.ok(kept); assert.equal(extra, 0);
+  });
+
   it('opens with the longest role the form accepts', async () => {
     const { Roles } = await import('../lib/roles.ts');
     const db = testDb(), profiles = new Profiles(db), { c, opened } = client(), views = new TalentRoomViews(db, c);

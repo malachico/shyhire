@@ -21,10 +21,8 @@ it('never fetches or links out from agent text: an image or link could reveal th
   assert.match(out, /site/);
 });
 
-it('both salary fields read as free text, up to the 200 characters the server takes', () => {
-  for (const file of ['components/Roles.tsx', 'components/CandidateResults.tsx']) {
-    const src = readFileSync(file, 'utf8');
-    assert.match(src, /maxLength=\{200\} placeholder="e\.g\. 150–200k ILS, flexible/, file);
-    assert.match(src, /Free text, recommended\./, file);
-  }
+it('the salary field reads as free text, up to the 200 characters the server takes', () => {
+  const src = readFileSync('components/Roles.tsx', 'utf8');
+  assert.match(src, /maxLength=\{200\} placeholder="e\.g\. 150–200k ILS, flexible/);
+  assert.match(src, /Free text, recommended\./);
 });

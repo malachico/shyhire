@@ -2,18 +2,18 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { Mark } from '@/components/Brand';
-import { openTalentRoom } from '@/lib/actions/rooms';
+import { talkAboutRole } from '@/lib/actions/roles';
+import { RoleForm } from '@/components/Roles';
 import type { CandidateSearch } from '@/lib/talent';
 
 /** Proof only, before a match: never a domain, username or link. */
 const BADGES: Record<string, string> = { github: 'GitHub verified', linkedin: 'LinkedIn connected', 'work-email': 'Work email verified', stripe: 'Stripe verified', vercel: 'Vercel verified' };
 
-export function CandidateResults({ results, query, existing }: { results: CandidateSearch; query: string; existing: Record<string, { id: string; label: string }> }) {
+export function CandidateResults({ results, query, existing, roles }: { results: CandidateSearch; query: string; existing: Record<string, { id: string; label: string }>; roles: { id: string; title: string; status: string }[] }) {
   const router = useRouter();
   const [alias, setAlias] = useState<string>();
-  const [role, setRole] = useState(query.slice(0, 200));
-  const [comp, setComp] = useState('');
-  const [mustHaves, setMustHaves] = useState('');
+  // Empty means a new role.
+  const [roleId, setRoleId] = useState(roles[0]?.id ?? '');
   const [error, setError] = useState<string>();
   const [pending, start] = useTransition();
 
@@ -22,7 +22,7 @@ export function CandidateResults({ results, query, existing }: { results: Candid
     if (!alias) return;
     setError(undefined);
     start(async () => {
-      const res = await openTalentRoom(alias, { role, comp, mustHaves });
+      const res = await talkAboutRole(roleId, alias);
       if ('error' in res) return setError(res.error);
       router.push(`/talent/conversations/${encodeURIComponent(res.id)}`);
     });
@@ -54,23 +54,28 @@ export function CandidateResults({ results, query, existing }: { results: Candid
     </ul>
     {results.capped && <p className="muted mt-4 text-center text-xs">Showing the best 20 matches.</p>}
     {alias && <div role="dialog" aria-modal="true" aria-labelledby="talk-title" className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 sm:items-center" onClick={(e) => e.target === e.currentTarget && !pending && setAlias(undefined)}>
-      <form onSubmit={startTalk} className="max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-t-2xl bg-[var(--surface)] p-5 sm:rounded-2xl">
+      <div className="max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-t-2xl bg-[var(--surface)] p-5 sm:rounded-2xl">
         <div className="flex items-center gap-3">
           <Mark size={44} />
           <div>
             <h2 id="talk-title" className="text-lg font-semibold">Talk to {alias}</h2>
-            <p className="muted text-sm">Only your agent sees this. The candidate sees your company name only once you both approve.</p>
+            <p className="muted text-sm">The candidate sees your company name only once you both approve.</p>
           </div>
         </div>
-        <label className="field">Role<input className="input" value={role} onChange={(e) => setRole(e.target.value)} maxLength={200} required placeholder="Senior backend engineer" /></label>
-        <label className="field">Salary<input className="input" value={comp} onChange={(e) => setComp(e.target.value)} maxLength={200} placeholder="e.g. 150–200k ILS, flexible · or $180k–$210k + equity" /><span className="hint block">Free text, recommended.</span></label>
-        <label className="field">Must-haves<textarea className="input min-h-20" value={mustHaves} onChange={(e) => setMustHaves(e.target.value)} maxLength={2000} placeholder="5+ years Go, remote in EU" /></label>
-        {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
-        <div className="flex items-center justify-end gap-3">
-          <button type="button" className="btn" disabled={pending} onClick={() => setAlias(undefined)}>Cancel</button>
-          <button type="submit" className="btn-primary" disabled={pending}>{pending ? 'Starting…' : 'Start'}</button>
-        </div>
-      </form>
+        {!!roles.length && <label className="field">Role<select className="input" value={roleId} disabled={pending} onChange={(e) => { setRoleId(e.target.value); setError(undefined); }}>
+          {roles.map((r) => <option key={r.id} value={r.id}>{r.title}{r.status === 'paused' ? ' (paused)' : ''}</option>)}
+          <option value="">New role…</option>
+        </select></label>}
+        {roleId
+          ? <form onSubmit={startTalk} className="space-y-4">
+            {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
+            <div className="flex items-center justify-end gap-3">
+              <button type="button" className="btn" disabled={pending} onClick={() => setAlias(undefined)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={pending}>{pending ? 'Starting…' : 'Start'}</button>
+            </div>
+          </form>
+          : <RoleForm talk={{ alias, query, onCancel: () => setAlias(undefined) }} />}
+      </div>
     </div>}
   </>;
 }

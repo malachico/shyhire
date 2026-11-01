@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { createRole, readRoleDescription, setRoleStatus, updateRole } from '@/lib/actions/roles';
+import { createRole, createRoleAndTalk, readRoleDescription, setRoleStatus, updateRole } from '@/lib/actions/roles';
 import type { RoleDraft } from '@/lib/profiles';
 import type { Role } from '@/lib/roles';
 import type { WorkMode } from '@/lib/types';
@@ -9,22 +9,22 @@ import type { WorkMode } from '@/lib/types';
 const WORK_MODES: { mode: WorkMode; label: string }[] = [{ mode: 'remote', label: 'Remote' }, { mode: 'hybrid', label: 'Hybrid' }, { mode: 'onsite', label: 'Onsite' }];
 const BLANK: RoleDraft = { title: '', looking: '', location: '', workModes: [], comp: '', mustHaves: '' };
 
-/** Describe a role once, or paste its job description; the company's agent finds good fits and starts talking to them. With `role`, edits it. */
-export function RoleForm({ first = false, role }: { first?: boolean; role?: Pick<Role, 'id' | 'title' | 'looking' | 'location' | 'workModes' | 'comp' | 'mustHaves'> }) {
+/** Describe a role once, or paste its job description; the company's agent finds good fits and starts talking to them. With `role`, edits it. With `talk`, the new role opens that candidate's conversation first. */
+export function RoleForm({ first = false, role, talk }: { first?: boolean; role?: Pick<Role, 'id' | 'title' | 'looking' | 'location' | 'workModes' | 'comp' | 'mustHaves'>; talk?: { alias: string; query: string; onCancel: () => void } }) {
   const router = useRouter();
-  const [open, setOpen] = useState(first || !!role);
+  const [open, setOpen] = useState(first || !!role || !!talk);
   const [pending, start] = useTransition();
   const [reading, startReading] = useTransition();
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
   const [pasted, setPasted] = useState('');
   const [filled, setFilled] = useState(false);
-  const [draft, setDraft] = useState<RoleDraft>(role ? { ...BLANK, ...role } : BLANK);
+  const [draft, setDraft] = useState<RoleDraft>(role ? { ...BLANK, ...role } : talk ? { ...BLANK, title: talk.query.slice(0, 200), looking: talk.query.slice(0, 2000) } : BLANK);
   // The fields stay uncontrolled: a new version remounts them with the new draft.
   const [version, setVersion] = useState(0);
   const fill = (next: RoleDraft) => { setDraft(next); setVersion((v) => v + 1); };
   if (!open) return <button type="button" className="btn-primary" onClick={() => setOpen(true)}>+ New role</button>;
-  return <form className={role ? 'mt-3 space-y-4' : 'card space-y-4'} onSubmit={(e) => {
+  return <form className={talk ? 'space-y-4' : role ? 'mt-3 space-y-4' : 'card space-y-4'} onSubmit={(e) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const body: RoleDraft = { title: String(f.get('title') ?? ''), looking: String(f.get('looking') ?? ''), location: String(f.get('location') ?? ''), workModes: f.getAll('workModes') as WorkMode[], comp: String(f.get('comp') ?? ''), mustHaves: String(f.get('mustHaves') ?? '') };
@@ -34,6 +34,11 @@ export function RoleForm({ first = false, role }: { first?: boolean; role?: Pick
         const r = await updateRole(role.id, body);
         if (r.error) { setError(r.error); return; }
         setDone('Saved.'); router.refresh();
+        return;
+      }
+      if (talk) {
+        const r = await createRoleAndTalk(body, talk.alias);
+        if (r.error !== undefined) setError(r.error); else router.push(`/talent/conversations/${encodeURIComponent(r.id)}`);
         return;
       }
       const r = await createRole(body);
@@ -77,7 +82,7 @@ export function RoleForm({ first = false, role }: { first?: boolean; role?: Pick
     {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
     <div className="flex items-center gap-3">
       <button className="btn-primary" disabled={pending}>{role ? (pending ? 'Saving…' : 'Save') : (pending ? 'Finding fits…' : 'Start')}</button>
-      {!first && !role && <button type="button" className="muted text-sm underline" onClick={() => setOpen(false)}>Cancel</button>}
+      {!first && !role && <button type="button" className="muted text-sm underline" disabled={pending} onClick={() => talk ? talk.onCancel() : setOpen(false)}>Cancel</button>}
     </div>
     {done && <p role="status" className="text-sm">{done}</p>}
   </form>;

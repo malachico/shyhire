@@ -10,21 +10,6 @@ async function requirePersonId(): Promise<string> {
   return session.sub;
 }
 
-export async function openTalentRoom(
-  candidateAlias: string,
-  brief: { role: string; comp: string; mustHaves: string },
-): Promise<{ id: string; status: string; error?: never } | { error: string; id?: never }> {
-  try {
-    const res = await roomViews().openRoom(await requirePersonId(), { candidateAlias, brief });
-    revalidatePath('/talent/conversations');
-    revalidatePath('/talent/search');
-    return res;
-  } catch (error) {
-    if (error instanceof TalentError) return { error: error.message };
-    throw error;
-  }
-}
-
 export async function decideTalentRoom(
   roomId: string,
   choice: string,
