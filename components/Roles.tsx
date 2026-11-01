@@ -93,7 +93,7 @@ export function RoleActions({ id, status }: { id: string; status: 'open' | 'paus
   const [pending, start] = useTransition();
   const set = (s: 'open' | 'paused' | 'closed') => start(async () => { await setRoleStatus(id, s); router.refresh(); });
   return <div className="flex gap-3 text-sm">
-    <button type="button" className="underline underline-offset-4" disabled={pending} onClick={() => set(status === 'open' ? 'paused' : 'open')}>{status === 'open' ? 'Pause' : 'Resume'}</button>
-    <button type="button" className="muted underline underline-offset-4" disabled={pending} onClick={() => set('closed')}>Close</button>
+    <button type="button" className="underline underline-offset-4" disabled={pending} onClick={() => set(status === 'open' ? 'paused' : 'open')}>{status === 'open' ? 'Pause' : status === 'paused' ? 'Resume' : 'Reopen'}</button>
+    {status !== 'closed' && <button type="button" className="muted underline underline-offset-4" disabled={pending} onClick={() => set('closed')}>Close</button>}
   </div>;
 }
