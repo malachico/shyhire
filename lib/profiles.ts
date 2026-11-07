@@ -710,9 +710,18 @@ export class Profiles {
       await this.changed(await this.mine(id));
     }
   }
+  /** Where match emails go. Runs on page load, so people signed in before this existed get mail without acting first. */
+  async rememberLogin(session: { sub: string; email?: string }): Promise<void> {
+    try {
+      await this.recordContact(session.sub, { ...(session.email ? { loginEmail: session.email } : {}) });
+    } catch {
+      // Showing the page matters more than the email.
+    }
+  }
+
   async recordContact(
     personId: string,
-    contact: { githubLogin?: string; workEmail?: string; domain?: string },
+    contact: { githubLogin?: string; workEmail?: string; domain?: string; loginEmail?: string },
     transaction?: Transaction,
   ): Promise<void> {
     if (typeof personId !== 'string' || !personId.trim()) return;
@@ -722,6 +731,8 @@ export class Profiles {
     if (typeof contact.githubLogin === 'string' && contact.githubLogin.trim()) payload.githubLogin = contact.githubLogin.trim();
     if (typeof contact.workEmail === 'string' && contact.workEmail.trim()) payload.workEmail = contact.workEmail.trim().toLowerCase();
     if (typeof contact.domain === 'string' && contact.domain.trim()) payload.domain = contact.domain.trim().toLowerCase();
+    // Private: where we mail this person. Never revealed to the other side, unlike workEmail.
+    if (typeof contact.loginEmail === 'string' && contact.loginEmail.trim()) payload.loginEmail = contact.loginEmail.trim().toLowerCase();
     if (transaction) transaction.set(ref, payload, { merge: true });
     else await ref.set(payload, { merge: true });
   }

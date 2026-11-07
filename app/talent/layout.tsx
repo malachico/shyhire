@@ -5,12 +5,14 @@ import { currentSession } from '@/lib/auth';
 import { switchMode } from '@/lib/actions/talent';
 import { currentMode } from '@/lib/mode';
 import { roomViews } from '@/lib/roomViews';
+import { profiles } from '@/lib/talent';
 
 export const metadata: Metadata = { title: 'Shyhire', description: 'Let your work introduce you.', robots: { index: false, follow: false } };
 
 export default async function TalentLayout({ children }: { children: React.ReactNode }) {
   const session = await currentSession();
   if (!session) return <div className="min-h-dvh">{children}</div>;
+  await profiles().rememberLogin(session);
   const mode = await currentMode();
   // A dot on Conversations when one is waiting on this person (a question or an approval).
   const waiting = await roomViews().waitingCount(session.sub).catch(() => 0);

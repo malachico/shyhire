@@ -29,13 +29,13 @@ export function normalizeDomain(raw: string): string {
   return domain;
 }
 
-export type NoticeMailer = (to: string[], subject: string, text: string) => Promise<void>;
+export type NoticeMailer = (to: string[], subject: string, text: string, html?: string) => Promise<void>;
 
 export function noticeMailer(user: string | undefined, appPassword: string | undefined): NoticeMailer | undefined {
   if (!user || !appPassword) return undefined;
   const transport = nodemailer.createTransport({ service: 'gmail', auth: { user, pass: appPassword } });
-  return async (to, subject, text) => {
-    if (to.length) await transport.sendMail({ from: `Shyhire <${user}>`, to, subject, text });
+  return async (to, subject, text, html) => {
+    if (to.length) await transport.sendMail({ from: `Shyhire <${user}>`, to, subject, text, ...(html ? { html } : {}) });
   };
 }
 
