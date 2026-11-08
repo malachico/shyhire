@@ -584,8 +584,11 @@ export class Profiles {
       return next;
     }).then((p) => (check ? p : this.changed(p)));
   }
-  async search(caller: TalentCaller, raw: unknown): Promise<{ profiles: CandidateCard[]; capped: boolean }> {
+  // `degraded` is true only when the AI search threw and we fell back to keyword search: the caller must not act on
+  // scoreless keyword results as if the search had succeeded (see roles.fill).
+  async search(caller: TalentCaller, raw: unknown): Promise<{ profiles: CandidateCard[]; capped: boolean; degraded?: boolean }> {
     const { id } = callerOf(caller);
+    let degraded = false;
     const query = text(raw ?? '', 1000, 'Role description');
     const own = await this.mine(id);
     const domains = new Set(verifiedDomains(own.verified));
@@ -612,10 +615,11 @@ export class Profiles {
         return { profiles: profiles.slice(0, 20), capped: false };
       } catch (err) {
         console.error('agent search failed; keyword search instead', err);
+        degraded = true;
       }
     }
     const terms = matchingTerms(query).map((term) => term.toLowerCase());
-    if (!terms.length) return { profiles: [], capped: false };
+    if (!terms.length) return { profiles: [], capped: false, degraded };
     const found = await this.col.where('searchable', '==', true).limit(201).get();
     const ranked = found.docs.slice(0, 200).flatMap((doc) => {
       const profile = doc.data() as TalentProfile;
@@ -626,7 +630,7 @@ export class Profiles {
       return score ? [{ score, card: c }] : [];
     });
     ranked.sort((a, b) => b.score - a.score || a.card.alias.localeCompare(b.card.alias));
-    return { profiles: ranked.slice(0, 20).map((r) => r.card), capped: found.size > 200 };
+    return { profiles: ranked.slice(0, 20).map((r) => r.card), capped: found.size > 200, degraded };
   }
   /** Pause or resume matching. Only a saved profile can be paused; saving keeps the choice. */
   async setPaused(caller: TalentCaller, paused: boolean): Promise<TalentProfile> {

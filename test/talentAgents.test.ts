@@ -193,4 +193,21 @@ describe('Standing roles', () => {
     await assert.rejects(roles.readDescription(me, 'too many'), { code: 'rate_limited' });
     await assert.rejects(new Roles(new Profiles(db), new TalentRoomViews(db, client().c), db).readDescription(me, 'text'), { code: 'unsupported' });
   });
+
+  it('a failed search opens nobody and leaves lastFillAt alone, so the daily cron retries', async () => {
+    const { Roles } = await import('../lib/roles.ts');
+    const db = testDb(), profiles = new Profiles(db), { c } = client(), views = new TalentRoomViews(db, c);
+    const co = { id: 'd-co', kind: 'human' as const };
+    await profiles.verify(co.id, { id: 'work-email:acme.test', source: 'work-email', label: 'w', verifiedAt: new Date().toISOString(), data: { domain: 'acme.test' } });
+    profiles.agentSearch = async () => { throw new Error('hub down'); };
+    const roles = new Roles(profiles, views, db);
+    const { role } = await roles.create(co, { title: 'Senior Go engineer', looking: 'Payments, remote EU' });
+    assert.equal((await db.collection('talent_roles').doc(role.id).get()).data()!.lastFillAt, undefined);
+    assert.equal(await roles.fill(role.id, 3), 0);
+    assert.equal((await db.collection('talent_roles').doc(role.id).get()).data()!.lastFillAt, undefined);
+    // Search recovers: the role fills on the next attempt and only then stamps lastFillAt.
+    profiles.agentSearch = async () => [];
+    assert.equal(await roles.fill(role.id, 3), 0);
+    assert.notEqual((await db.collection('talent_roles').doc(role.id).get()).data()!.lastFillAt, undefined);
+  });
 });
