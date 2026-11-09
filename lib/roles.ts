@@ -105,7 +105,10 @@ export class Roles {
   async fill(roleId: string, max: number): Promise<number> {
     const role = (await this.col.doc(roleId).get()).data() as Role | undefined;
     if (!role || role.status !== 'open') return 0;
-    const { profiles } = await this.profiles.search(role.companyId, [role.title, role.location, role.workModes?.join(', '), role.looking, role.mustHaves].filter(Boolean).join('. ').slice(0, 1000));
+    const { profiles, degraded } = await this.profiles.search(role.companyId, [role.title, role.location, role.workModes?.join(', '), role.looking, role.mustHaves].filter(Boolean).join('. ').slice(0, 1000));
+    // Search failed (AI ranker down): contact nobody and don't stamp lastFillAt, so the daily cron retries this role
+    // instead of skipping it for a day on an empty keyword fallback.
+    if (degraded) { console.error(`role ${roleId}: search degraded, skipping fill (will retry)`); return 0; }
     // Anyone this company already talks to, for any role, isn't contacted again.
     const busy = new Set([...role.contacted, ...(await this.rooms.listCompanyRooms(role.companyId)).map((r) => r.candidateAlias)]);
     // ponytail: keyword-search results have no score, so they never auto-open; only the AI search does.
