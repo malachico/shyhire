@@ -8,10 +8,10 @@ import { TalentRoomViews, type ParlyRoomsClient, type StoredTalentRoom } from '.
 
 const SECRET = 'private.login@gmail.com';
 
-async function setup(mailer: (to: string[], subject: string, text: string, html?: string) => Promise<void>, id: string) {
+async function setup(mailer: (to: string[], subject: string, text: string, html?: string) => Promise<void>, id: string, cand: Record<string, string> = { loginEmail: SECRET, workEmail: 'dana@work.dev', githubLogin: 'dana' }) {
   const db = testDb();
   const profiles = new Profiles(db);
-  await profiles.recordContact('cand', { loginEmail: SECRET, workEmail: 'dana@work.dev', githubLogin: 'dana' });
+  await profiles.recordContact('cand', cand);
   await profiles.recordContact('comp', { loginEmail: 'Boss@Acme.dev' });
   await db.collection('talent_rooms').doc(id).set({
     companyId: 'comp', companyName: 'acme.dev', candidateId: 'cand', candidateAlias: 'Candidate #1',
@@ -64,6 +64,25 @@ describe('match emails', () => {
     await views.approve('comp', 'room-mail-2', 1);
     assert.deepEqual(await views.approve('cand', 'room-mail-2', 1), { ok: true, agreed: true });
     assert.equal(tries, 2);
+  });
+
+  it('logs instead of silently dropping when a side has no address on file', async () => {
+    const { mails, mailer } = collector();
+    // no loginEmail, no verified work email: nothing to mail the candidate at.
+    const { views } = await setup(mailer, 'room-mail-4', { githubLogin: 'dana' });
+    const errors: string[] = [];
+    const orig = console.error;
+    console.error = (...a: unknown[]) => { errors.push(a.join(' ')); };
+    try {
+      await views.approve('comp', 'room-mail-4', 1);
+      await views.approve('cand', 'room-mail-4', 1);
+      await views.handleWebhookEvent({ id: 'evt-4', type: 'room.agreed', data: { roomId: 'room-mail-4' } });
+    } finally {
+      console.error = orig;
+    }
+    // company still mailed; candidate had no address and was logged, not dropped in silence.
+    assert.deepEqual(mails.map((m) => m.to), [['boss@acme.dev']]);
+    assert.ok(errors.some((e) => e.includes('no address on file') && e.includes('cand')));
   });
 
   it('escapes everything agents and people wrote', () => {
