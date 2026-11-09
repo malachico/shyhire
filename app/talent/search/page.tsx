@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import { currentSession } from '@/lib/auth';
 import { TalentError } from '@/lib/profiles';
-import { roomViews } from '@/lib/roomViews';
-import { statusOf } from '@/lib/status';
+import { roomViews, type CompanyRoomSummary } from '@/lib/roomViews';
+import { pillClass, statusOf } from '@/lib/status';
 import { profiles, roles, type CandidateSearch } from '@/lib/talent';
 import { RoleActions, RoleForm } from '@/components/Roles';
 import { CandidateResults } from '@/components/CandidateResults';
@@ -29,9 +29,16 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
     <a href="/talent/verify/work-email" className="btn-primary mt-6">Verify work email</a>
   </main>;
   if (!q) {
-    const list = await roles().list(session.sub);
+    const [list, rooms] = await Promise.all([
+      roles().list(session.sub),
+      roomViews().listCompanyRooms(session.sub).catch((): CompanyRoomSummary[] => []),
+    ]);
+    // Conversations live under their role. A room whose role is gone (or absent) falls to "Other".
+    const roleIds = new Set(list.map((r) => r.id));
+    const byRole: Record<string, typeof rooms> = {};
+    for (const m of rooms) (byRole[m.roleId && roleIds.has(m.roleId) ? m.roleId : '_'] ??= []).push(m);
     return <main className="mx-auto max-w-xl space-y-5 px-4 py-8">
-      <h1 className="text-[28px] leading-none">Hiring</h1>
+      <h1 className="text-[28px] leading-none">Roles</h1>
       {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
       <RoleForm first={!list.length} />
       {list.map((r) => <section key={r.id} aria-label={r.title} className="card space-y-3">
@@ -41,13 +48,18 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
         </div>
         <div className="flex flex-wrap gap-1.5 text-sm">
           <span className="pill">{r.stats.talking} talking</span>
-          {r.stats.needsYou > 0 && <a href="/talent/conversations" className="pill pill-accent">{r.stats.needsYou} need{r.stats.needsYou === 1 ? 's' : ''} you</a>}
+          {r.stats.needsYou > 0 && <span className="pill pill-accent">{r.stats.needsYou} need{r.stats.needsYou === 1 ? 's' : ''} you</span>}
           <span className="pill">{r.stats.matched} matched</span>
           <span className="pill">{r.contacted.length} contacted</span>
         </div>
-        <div className="flex items-center justify-between gap-3"><a href="/talent/conversations" className="text-sm font-medium underline underline-offset-4">Conversations</a><RoleActions id={r.id} status={r.status} /></div>
+        <RoomList rooms={byRole[r.id] ?? []} />
+        <div className="flex items-center justify-end gap-3"><RoleActions id={r.id} status={r.status} /></div>
         <details><summary className="cursor-pointer text-sm font-medium">Edit</summary><RoleForm role={r} /></details>
       </section>)}
+      {!!byRole['_']?.length && <section aria-label="Other conversations" className="card space-y-3">
+        <h2 className="font-semibold">Other conversations</h2>
+        <RoomList rooms={byRole['_']} />
+      </section>}
       <SearchForm formClass="flex gap-2 pt-4" className="input min-w-0 flex-1 text-sm" aria-label="Browse candidates" placeholder="Or browse candidates yourself…" button="Browse" buttonClass="btn text-sm" />
     </main>;
   }
@@ -61,4 +73,20 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
     <a href="/talent/search" className="muted mb-4 inline-block text-sm">← Roles</a>
     {results && <CandidateResults results={results} query={q} existing={existing} roles={list} />}
   </main>;
+}
+
+// A role's conversations: candidate alias + plain status word only (privacy — nothing from the brief).
+function RoomList({ rooms }: { rooms: CompanyRoomSummary[] }) {
+  if (!rooms.length) return <p className="muted text-sm">No conversations yet.</p>;
+  return <ul className="space-y-1">
+    {rooms.map((m) => {
+      const s = statusOf(m.status, { needsMe: !!m.needsDecision, summaryReady: m.documentVersion !== undefined, iApproved: m.iApproved });
+      return <li key={m.id}>
+        <a href={`/talent/conversations/${encodeURIComponent(m.id)}`} className="flex items-center justify-between gap-3 text-sm hover:underline">
+          <span className="truncate">{m.candidateAlias}</span>
+          <span className={`${pillClass(s.tone)} shrink-0`}>{s.label}</span>
+        </a>
+      </li>;
+    })}
+  </ul>;
 }

@@ -17,14 +17,16 @@ export default async function TalentLayout({ children }: { children: React.React
   // A dot on Conversations when one is waiting on this person (a question or an approval).
   const waiting = await roomViews().waitingCount(session.sub).catch(() => 0);
   const tabs = mode === 'hire'
-    ? [{ href: '/talent/search', label: 'Hiring' }, { href: '/talent/conversations', label: 'Conversations' }]
+    ? [{ href: '/talent/search', label: 'Roles' }]
     : [{ href: '/talent/profile', label: 'Profile' }, { href: '/talent/conversations', label: 'Conversations' }];
+  // The dot must sit on a tab that exists: for a hirer the only tab is Roles.
+  const dotHref = mode === 'hire' ? '/talent/search' : '/talent/conversations';
   const initial = (session.name || session.email || '?').trim().charAt(0).toUpperCase();
   return <div className="min-h-dvh">
     <header className="border-b border-[var(--border)] bg-[var(--surface)]">
       <nav aria-label="Main" className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-4 px-4">
         <a href={tabs[0]!.href} aria-label="Shyhire"><AppIcon /></a>
-        <NavTabs tabs={tabs} dot={waiting ? '/talent/conversations' : undefined} />
+        <NavTabs tabs={tabs} dot={waiting ? dotHref : undefined} />
         <details className="relative">
           <summary aria-label="Account menu" className="flex size-8 cursor-pointer list-none items-center justify-center rounded-full border border-[var(--border)] text-sm font-medium">{initial}</summary>
           <div className="card absolute right-0 z-10 mt-2 w-60 space-y-1 p-2 text-sm">
