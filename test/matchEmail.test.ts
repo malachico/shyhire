@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { FieldValue } from '@google-cloud/firestore';
 import { before, describe, it } from 'node:test';
 import { testDb } from '../lib/db.ts';
-import { matchEmail } from '../lib/matchEmail.ts';
+import { attentionEmail, matchEmail } from '../lib/matchEmail.ts';
 import { Profiles } from '../lib/profiles.ts';
 import { TalentRoomViews, type ParlyRoomsClient, type StoredTalentRoom } from '../lib/roomViews.ts';
 
@@ -38,7 +39,7 @@ describe('match emails', () => {
     const { mails, mailer } = collector();
     const { views } = await setup(mailer, 'room-mail-1');
     await views.approve('comp', 'room-mail-1', 1);
-    assert.equal(mails.length, 0);
+    assert.equal(mails.splice(0).filter((m) => m.all.includes("It's a match")).length, 0);
     await views.approve('cand', 'room-mail-1', 1);
     await views.handleWebhookEvent({ id: 'evt-1', type: 'room.agreed', data: { roomId: 'room-mail-1' } });
 
@@ -63,7 +64,7 @@ describe('match emails', () => {
     const { views } = await setup(async () => { tries += 1; throw new Error('smtp down'); }, 'room-mail-2');
     await views.approve('comp', 'room-mail-2', 1);
     assert.deepEqual(await views.approve('cand', 'room-mail-2', 1), { ok: true, agreed: true });
-    assert.equal(tries, 2);
+    assert.equal(tries, 3); // "your turn" to the candidate, then the match to both.
   });
 
   it('escapes everything agents and people wrote', () => {
@@ -91,5 +92,69 @@ describe('rememberLogin', () => {
 
   it('runs on every talent page load, not only on actions', () => {
     assert.match(readFileSync('app/talent/layout.tsx', 'utf8'), /await profiles\(\)\.rememberLogin\(session\)/);
+  });
+});
+
+describe('attention emails', () => {
+  before(() => { process.env.APP_URL = 'https://shyhire.test/'; });
+  const CANDIDATE = [[SECRET]], COMPANY = [['boss@acme.dev']];
+  const question = (id: string, room: string, side: string) => ({ id, type: 'room.needs_decision', data: { roomId: room, side, question: 'acme.dev offers $200k, ok?', options: ['Yes'] } });
+  const summary = (id: string, room: string, version: number) => ({ id, type: 'room.document_updated', data: { roomId: room, version } });
+
+  it("mails only the side being asked, once, with nothing from the room in it", async () => {
+    const { mails, mailer } = collector();
+    const { views } = await setup(mailer, 'room-att-1');
+    const evt = question('q1', 'room-att-1', 'candidate');
+    await views.handleWebhookEvent(evt);
+    await views.handleWebhookEvent(evt);
+    assert.deepEqual(mails.map((m) => m.to), CANDIDATE);
+    for (const leak of ['acme', 'Backend', '$200k']) assert.ok(!mails[0]!.all.toLowerCase().includes(leak.toLowerCase()), leak);
+    assert.ok(mails[0]!.all.includes('https://shyhire.test/talent/conversations/room-att-1'));
+  });
+
+  it('mails both sides for the first summary, not for agent revisions, and again when a person rewrites an approved one', async () => {
+    const { mails, mailer } = collector();
+    const { db, views } = await setup(mailer, 'room-att-2');
+    await db.collection('talent_rooms').doc('room-att-2').update({ documentVersion: FieldValue.delete() });
+    await views.handleWebhookEvent(summary('d1', 'room-att-2', 1));
+    assert.equal(mails.splice(0).length, 2);
+    await views.handleWebhookEvent(summary('d2', 'room-att-2', 2));
+    assert.equal(mails.length, 0);
+    await views.approve('comp', 'room-att-2', 2);
+    mails.length = 0;
+    await views.handleWebhookEvent(summary('d3', 'room-att-2', 3));
+    assert.equal(mails.splice(0).length, 2);
+    await views.handleWebhookEvent(summary('d4', 'room-att-2', 4));
+    assert.equal(mails.length, 0);
+  });
+
+  it('tells only the other side when one approves, once even on a double click', async () => {
+    const { mails, mailer } = collector();
+    const { views } = await setup(mailer, 'room-att-3');
+    await views.approve('cand', 'room-att-3', 1);
+    await views.approve('cand', 'room-att-3', 1);
+    assert.deepEqual(mails.map((m) => m.to), COMPANY);
+    assert.ok(mails[0]!.all.includes('They approved'));
+  });
+
+  it('stays quiet when the webhook for an approved summary arrives after the approval', async () => {
+    const { mails, mailer } = collector();
+    const { views } = await setup(mailer, 'room-att-5');
+    await views.approve('comp', 'room-att-5', 1);
+    mails.length = 0;
+    await views.handleWebhookEvent(summary('d5', 'room-att-5', 1));
+    assert.equal(mails.length, 0);
+  });
+
+  it('a mail failure does not fail the webhook', async () => {
+    const { views } = await setup(async () => { throw new Error('smtp down'); }, 'room-att-4');
+    assert.deepEqual(await views.handleWebhookEvent(question('q2', 'room-att-4', 'company')), { ok: true });
+  });
+
+  it('every kind names no one and links to the conversation', () => {
+    for (const kind of ['question', 'summary', 'their_approval'] as const) {
+      const { html, text } = attentionEmail(kind, 'https://x.test/?a=1&b="2');
+      assert.ok(!html.includes('b="2') && text.includes('https://x.test/'));
+    }
   });
 });
