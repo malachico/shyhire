@@ -1,8 +1,11 @@
 import { FieldValue, type Firestore } from '@google-cloud/firestore';
 import { db } from './db.ts';
+import { appUrl } from './github.ts';
+import { matchEmail } from './matchEmail.ts';
 import { redact } from './privacy.ts';
 import { parly, ParlyError, type Room, type RoomMessage, type RoomStatus, type SideInput } from './parly.ts';
 import { callerOf, domainBlocked, parseWorkModes, TalentError, text, verifiedDomains, type CvDetails, type TalentCaller, type TalentProfile, type WorkMode } from './profiles.ts';
+import { noticeMailer, type NoticeMailer } from './workEmail.ts';
 
 export type RoomSideKind = 'company' | 'candidate';
 
@@ -40,6 +43,8 @@ export interface StoredTalentRoom {
   status: RoomStatus;
   needsDecision?: TalentRoomDecision;
   documentVersion?: number;
+  /** Set once when the match emails go out. */
+  matchMailedAt?: string;
   createdAt: string;
   updatedAt: string;
   lastEventId?: string;
@@ -275,15 +280,18 @@ function rethrowParlyError(err: unknown): never {
 export class TalentRoomViews {
   private readonly store: Firestore;
   private readonly parlyClient: ParlyRoomsClient;
+  private readonly mailer: NoticeMailer | undefined;
   private readonly col;
   private agentsEnsured = false;
 
   constructor(
     store: Firestore = db(),
     parlyClient: ParlyRoomsClient = parly,
+    mailer: NoticeMailer | undefined = noticeMailer(process.env.SMTP_USER, process.env.SMTP_APP_PASSWORD),
   ) {
     this.store = store;
     this.parlyClient = parlyClient;
+    this.mailer = mailer;
     this.col = this.store.collection('talent_rooms');
   }
 
@@ -350,6 +358,49 @@ export class TalentRoomViews {
       ...(githubLogin ? { githubLogin, githubUrl: `https://github.com/${githubLogin}` } : {}),
       verifiedDomains: [...domains],
     };
+  }
+
+  /**
+   * Tells both sides they matched, each in their own email. Never throws: a mail problem must not fail the approval.
+   * ponytail: at most once (claimed before sending, no retry). Add a queue if a lost email starts to matter.
+   */
+  private async notifyMatch(roomId: string): Promise<void> {
+    if (!this.mailer) return;
+    try {
+      const url = `${appUrl()}/talent/conversations/${roomId}`;
+      const ref = this.col.doc(roomId);
+      const record = await this.store.runTransaction(async (tx) => {
+        const data = (await tx.get(ref)).data() as StoredTalentRoom | undefined;
+        if (data?.status !== 'agreed' || data.matchMailedAt) return undefined;
+        tx.set(ref, { matchMailedAt: new Date().toISOString() }, { merge: true });
+        return data;
+      });
+      if (!record) return;
+
+      const summary = await this.parlyClient.getRoom(roomId).then((room) => room.document?.text, () => undefined);
+      const role = normalizeBrief(record.brief).role;
+      const [company, candidate] = await Promise.all([
+        this.resolveRevealedContact('company', record),
+        this.resolveRevealedContact('candidate', record),
+      ]);
+      const sent = await Promise.allSettled([
+        this.mailMatch(record.companyId, company, matchEmail({ other: candidate, role, summary, url })),
+        this.mailMatch(record.candidateId, candidate, matchEmail({ other: company, role, summary, url })),
+      ]);
+      for (const r of sent) {
+        if (r.status === 'rejected') console.error('match email failed', roomId, (r.reason as { code?: string })?.code);
+      }
+    } catch (err) {
+      console.error('match email failed', roomId, (err as { code?: string })?.code);
+    }
+  }
+
+  /** One recipient per message, so neither side ever sees the other's address in the headers. */
+  private async mailMatch(personId: string, self: TalentRevealedContact, mail: ReturnType<typeof matchEmail>): Promise<void> {
+    const contact = await this.store.collection('talent_contacts').doc(personId).get();
+    const loginEmail = contact.get('loginEmail') as unknown;
+    const to = typeof loginEmail === 'string' && loginEmail ? loginEmail : self.email;
+    if (to) await this.mailer?.([to], mail.subject, mail.text, mail.html);
   }
 
   /**
@@ -474,7 +525,7 @@ export class TalentRoomViews {
     if (!roomId) return { ok: true, ignored: true };
 
     const ref = this.col.doc(roomId);
-    return this.store.runTransaction(async (tx) => {
+    const result = await this.store.runTransaction(async (tx): Promise<{ ok: true; duplicate?: boolean; ignored?: boolean }> => {
       const snap = await tx.get(ref);
       if (!snap.exists) return { ok: true, ignored: true };
       const current = snap.data() as StoredTalentRoom;
@@ -528,6 +579,8 @@ export class TalentRoomViews {
       tx.set(ref, updates, { merge: true });
       return { ok: true };
     });
+    if (kind === 'agreed') await this.notifyMatch(roomId);
+    return result;
   }
 
   private async loadForViewer(
@@ -740,6 +793,7 @@ export class TalentRoomViews {
         },
         { merge: true },
       );
+      if (res.agreed) await this.notifyMatch(id);
       return { ok: true, agreed: Boolean(res.agreed) };
     } catch (err) {
       rethrowParlyError(err);
