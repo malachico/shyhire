@@ -133,6 +133,7 @@ describe('Standing roles', () => {
     assert.equal(opened.length, 1);
 
     await roles.setStatus(co, role.id, 'closed');
+    assert.deepEqual((await roles.list(co)).map((r) => r.status), ['closed']); // Closed stays visible to its owner.
     await assert.rejects(roles.talk(co, role.id, b!.alias), /closed/);
 
     // A new role from Talk: its first fill finds the same candidate, who still gets one room.
@@ -142,10 +143,11 @@ describe('Standing roles', () => {
     assert.equal(made.opened, 1);
     assert.ok(made.room);
     assert.deepEqual([...(await roles.list(co))[0]!.contacted].sort(), [b!.alias, d!.alias].sort());
+    assert.deepEqual((await roles.list(co)).map((r) => r.status), ['open', 'closed']); // Closed last.
 
     // Nothing started, so no role stays behind for a retry to double.
     await assert.rejects(roles.create(co, { title: 'Ghost', looking: 'Payments' }, 'Candidate #00000000'), /candidate|not found|No such/i);
-    assert.deepEqual((await roles.list(co)).map((r) => r.title), ['Staff Go engineer']);
+    assert.equal((await roles.list(co)).filter((r) => r.status !== 'closed').length, 1);
     // The conversation exists even if the extra search fails.
     const failing = Object.assign(Object.create(profiles), { search: async () => { throw new Error('search down'); } }) as Profiles;
     const late = await profiles.save({ id: 't-e', kind: 'human' }, { version: 0, headline: 'Go', facts: ['Go engineer'] });

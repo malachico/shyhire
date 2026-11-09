@@ -44,7 +44,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
       {list.map((r) => <section key={r.id} aria-label={r.title} className="card space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0"><h2 className="font-semibold">{r.title}</h2>{(r.location || !!r.workModes?.length) && <p className="muted text-sm capitalize">{[r.location, ...(r.workModes ?? [])].filter(Boolean).join(' · ')}</p>}<p className="muted line-clamp-2 text-sm">{r.looking}</p></div>
-          <span className={`pill shrink-0 ${r.status === 'open' ? 'pill-good' : ''}`}>{r.status === 'open' ? 'Finding fits' : 'Paused'}</span>
+          <span className={`pill shrink-0 ${r.status === 'open' ? 'pill-good' : ''}`}>{r.status === 'open' ? 'Finding fits' : r.status === 'paused' ? 'Paused' : 'Closed'}</span>
         </div>
         <div className="flex flex-wrap gap-1.5 text-sm">
           <span className="pill">{r.stats.talking} talking</span>
@@ -66,7 +66,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
   // The candidates this person already talks to: their card shows that conversation instead of "Talk".
   // Oldest first, so the newest room for a candidate is the one that stays.
   const existing = Object.fromEntries((await roomViews().listCompanyRooms(session.sub).catch(() => [])).reverse().map((r) => [r.candidateAlias, { id: r.id, label: statusOf(r.status, { needsMe: !!r.needsDecision, summaryReady: r.documentVersion !== undefined, iApproved: r.iApproved }).label }]));
-  const list = (await roles().list(session.sub)).map(({ id, title, status }) => ({ id, title, status }));
+  const list = (await roles().list(session.sub)).filter((r) => r.status !== 'closed').map(({ id, title, status }) => ({ id, title, status }));
   return <main className="mx-auto max-w-3xl px-4 py-8">
     <SearchForm formClass="flex gap-2" className="input min-w-0 flex-1" defaultValue={q} aria-label="Describe the role" placeholder="Describe the role, e.g. backend engineer, Go, Postgres" button="Find" buttonClass="btn-primary" />
     {error && <p role="alert" className="mt-6 text-sm text-[var(--bad-fg)]">{error}</p>}
