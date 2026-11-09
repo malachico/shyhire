@@ -42,4 +42,11 @@ describe('ConversationView', () => {
   it('shows no agreed card on a match with no summary', () => {
     assert.doesNotMatch(render({ status: 'agreed', document: undefined }), /What you both agreed/);
   });
+
+  it('a decision pending on the other side reads as waiting, not ready to approve', () => {
+    // getRoomView fills waitingOn for whoever decides, but needsDecision only for my own side.
+    const html = render({ waitingOn: 'candidate', document: { version: 2, text: 'Draft', myApproved: false } });
+    assert.match(html, /Waiting for them to answer their agent/);
+    assert.doesNotMatch(html, />Approve</);
+  });
 });

@@ -17,7 +17,8 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
   const ended = room.status === 'closed' || room.status === 'stuck';
   const matched = room.status === 'agreed';
   const myDecision = room.needsDecision && room.waitingOn === room.viewerSide ? room.needsDecision : undefined;
-  const s = statusOf(room.status, { needsMe: !!myDecision, summaryReady: !!doc, iApproved: doc?.myApproved });
+  const theyDecide = !!room.waitingOn && room.waitingOn !== room.viewerSide; // a decision pends on their side, not ours (getRoomView only fills needsDecision for my own side)
+  const s = statusOf(room.status, { needsMe: !!myDecision, theyDecide, summaryReady: !!doc, iApproved: doc?.myApproved });
   const isCompany = room.viewerSide === 'company';
   const title = isCompany ? room.candidateAlias : room.companyName;
   const run = (fn: () => Promise<{ error?: string }>) => {
@@ -65,7 +66,7 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
       <button type="button" className="muted mt-4 text-sm underline" disabled={pending} onClick={pass}>Pass on this conversation</button>
     </section>}
 
-    {!ended && !matched && !myDecision && doc && <section className="card mt-6">
+    {!ended && !matched && !myDecision && !theyDecide && doc && <section className="card mt-6">
       <p className="font-semibold">{doc.myApproved ? 'You approved. Waiting for them.' : 'The agents agree on this summary'}</p>
       <div className="mt-3 rounded-lg bg-[var(--bg)] p-4 text-sm leading-relaxed"><Markdown text={doc.text} /></div>
       {doc.myApproved
@@ -77,8 +78,8 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
       <p className="muted mt-3 text-xs">Approving shares your contact details with them only if they approve too.</p>
     </section>}
 
-    {!ended && !matched && !myDecision && !doc && <section className="card mt-6">
-      <p className="font-medium">{room.needsDecision ? 'Waiting for them to answer their agent.' : 'The agents are talking.'}</p>
+    {!ended && !matched && !myDecision && (theyDecide || !doc) && <section className="card mt-6">
+      <p className="font-medium">{theyDecide ? 'Waiting for them to answer their agent.' : 'The agents are talking.'}</p>
       <p className="muted mt-1 text-sm">You&apos;ll see a summary here to approve, or a question if your agent needs you.</p>
       <button type="button" className="muted mt-4 text-sm underline" disabled={pending} onClick={pass}>Pass on this conversation</button>
     </section>}

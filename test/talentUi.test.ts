@@ -72,6 +72,7 @@ describe('Shyhire UI support', () => {
     assert.equal(statusOf('needs_decision', { needsMe: true }).label, 'Needs you');
     assert.equal(statusOf('needs_decision').label, 'Waiting for them');
     assert.equal(statusOf('talking', { summaryReady: true }).label, 'Ready to approve');
+    assert.equal(statusOf('talking', { theyDecide: true, summaryReady: true }).label, 'Waiting for them');
     assert.equal(statusOf('agreed').label, 'Matched');
     assert.equal(statusOf('closed').label, 'Ended');
     assert.equal(statusOf('stuck').label, 'Ended');
