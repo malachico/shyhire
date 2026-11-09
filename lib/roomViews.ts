@@ -400,7 +400,13 @@ export class TalentRoomViews {
     const contact = await this.store.collection('talent_contacts').doc(personId).get();
     const loginEmail = contact.get('loginEmail') as unknown;
     const to = typeof loginEmail === 'string' && loginEmail ? loginEmail : self.email;
-    if (to) await this.mailer?.([to], mail.subject, mail.text, mail.html);
+    // A GitHub/LinkedIn login with a private email and no verified work email leaves us no address.
+    // matchMailedAt is already claimed (no retry), so a silent drop here is a mail lost without trace — log it.
+    if (!to) {
+      console.error('match email: no address on file', personId);
+      return;
+    }
+    await this.mailer?.([to], mail.subject, mail.text, mail.html);
   }
 
   /**
