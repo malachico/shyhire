@@ -33,7 +33,7 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
   };
 
   return <main className="mx-auto max-w-3xl px-4 py-8">
-    <a href="/talent/conversations" className="muted text-sm">← Conversations</a>
+    <a href={isCompany ? '/talent/search' : '/talent/conversations'} className="muted text-sm">← {isCompany ? 'Roles' : 'Conversations'}</a>
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
         <h1 className="truncate text-2xl font-semibold tracking-tight">{title}</h1>

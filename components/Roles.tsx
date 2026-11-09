@@ -24,7 +24,7 @@ export function RoleForm({ first = false, role, talk }: { first?: boolean; role?
   // The fields stay uncontrolled: a new version remounts them with the new draft.
   const [version, setVersion] = useState(0);
   const fill = (next: RoleDraft) => { setDraft(next); setVersion((v) => v + 1); };
-  if (!open) return <button type="button" className="btn-primary" onClick={() => setOpen(true)}>+ New role</button>;
+  if (!open) return <>{done && <p role="status" className="text-sm">{done}</p>}<button type="button" className="btn-primary" onClick={() => setOpen(true)}>+ New role</button></>;
   return <form className={talk ? 'space-y-4' : role ? 'mt-3 space-y-4' : 'card space-y-4'} onSubmit={(e) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -46,7 +46,7 @@ export function RoleForm({ first = false, role, talk }: { first?: boolean; role?
       if ('error' in r && r.error) { setError(r.error); return; }
       const n = 'opened' in r ? r.opened ?? 0 : 0;
       setDone(n ? `Your agent started ${n} conversation${n === 1 ? '' : 's'}. You'll hear when someone needs you.` : "Role is open. No strong fits yet; your agent checks again every day.");
-      setOpen(first); fill(BLANK); setFilled(false); router.refresh();
+      setOpen(false); fill(BLANK); setFilled(false); router.refresh();
     });
   }}>
     {role
