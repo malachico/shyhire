@@ -326,9 +326,10 @@ describe('Talent company rooms (C) and candidate requests (D)', () => {
       data: { roomId: 'room-webhook-1', version: 3 },
     });
     snap = (await db.collection('talent_rooms').doc('room-webhook-1').get()).data() as StoredTalentRoom;
-    assert.equal(snap.status, 'talking');
+    // A redrafted summary must not clear a still-unanswered decision; only decide()/terminal webhooks do.
+    assert.equal(snap.status, 'needs_decision');
     assert.equal(snap.documentVersion, 3);
-    assert.equal(snap.needsDecision, undefined);
+    assert.equal(snap.needsDecision?.side, 'candidate');
 
     const replayOld = await views.handleWebhookEvent({
       id: 'evt_dec_1',

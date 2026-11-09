@@ -556,10 +556,8 @@ export class TalentRoomViews {
         if (typeof data.version === 'number' && Number.isInteger(data.version) && data.version > 0) {
           updates.documentVersion = data.version;
         }
-        if (current.status === 'needs_decision') {
-          updates.status = 'talking';
-          updates.needsDecision = FieldValue.delete();
-        }
+        // ponytail: don't clear a pending decision here — a summary can be redrafted while a
+        // decision is still unanswered. decide() and the terminal webhooks own the clearing.
       } else if (kind === 'agreed') {
         updates.status = 'agreed';
         updates.needsDecision = FieldValue.delete();
