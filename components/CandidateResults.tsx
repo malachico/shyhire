@@ -37,7 +37,7 @@ export function CandidateResults({ results, query, existing, roles }: { results:
           <div className="flex items-start justify-between gap-3">
             <h2 className="font-semibold">{p.alias}</h2>
             {talking
-              ? <a href={`/talent/conversations/${encodeURIComponent(talking.id)}`} className="pill pill-accent">{talking.label} →</a>
+              ? <a href={`/talent/conversations/${encodeURIComponent(talking.id)}`} className="pill pill-accent max-w-[60%] text-right whitespace-normal!">{talking.label} →</a>
               : <button type="button" className="btn-primary min-h-9 text-sm" onClick={() => { setAlias(p.alias); setError(undefined); }}>Talk</button>}
           </div>
           {p.why && <p className="mt-2 rounded-lg bg-[var(--accent-bg)] px-3 py-2 text-sm"><span className="font-semibold">Why: </span>{p.why}</p>}

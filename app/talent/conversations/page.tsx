@@ -4,7 +4,8 @@ import { currentMode } from '@/lib/mode';
 import { TalentError } from '@/lib/profiles';
 import { roomViews, type ConversationRow } from '@/lib/roomViews';
 import { profiles } from '@/lib/talent';
-import { pillClass, statusOf } from '@/lib/status';
+import { statusOf } from '@/lib/status';
+import { ConversationList } from '@/components/ConversationList';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,17 +32,12 @@ export default async function Conversations() {
           ? <a href="/talent/profile" className="btn-primary mt-4">Complete your profile</a>
           : <p className="mt-2 text-sm">{profile.paused ? <>Your profile is paused. <a href="/talent/profile" className="link">Resume it</a> to get conversations.</> : "You're all set. When a company's agent wants to talk with you, it shows up here."}</p>}
     </div>}
-    {!!rows.length && <ul className="mt-6 divide-y divide-[var(--border)] overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface)]">
-      {rows.map((r) => {
-        const s = statusOf(r.status, { needsMe: r.needsMe, summaryReady: r.documentVersion !== undefined, iApproved: r.iApproved });
-        return <li key={r.id}><a href={`/talent/conversations/${encodeURIComponent(r.id)}`} className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-[var(--bg)]">
-          <span className="min-w-0">
-            <span className="block truncate font-medium">{r.title || 'Conversation'}</span>
-            <span className="muted block truncate text-sm">{r.side === 'company' ? `You're hiring${r.role ? ` · ${r.role}` : ''}` : `Wants to talk with you${r.role ? ` · ${r.role}` : ''}`}</span>
-          </span>
-          <span className={pillClass(s.tone)}>{s.label}</span>
-        </a></li>;
-      })}
-    </ul>}
+    {!!rows.length && <ConversationList rows={rows.map((r) => ({
+      id: r.id,
+      title: r.title || 'Conversation',
+      sub: `${r.side === 'company' ? "You're hiring" : 'Wants to talk with you'}${r.role ? ` · ${r.role}` : ''}`,
+      updatedAt: r.updatedAt,
+      ...statusOf(r.status, { needsMe: r.needsMe, summaryReady: r.documentVersion !== undefined, iApproved: r.iApproved }),
+    }))} />}
   </main>;
 }

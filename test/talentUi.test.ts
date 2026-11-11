@@ -7,7 +7,7 @@ import { testDb } from '../lib/db.ts';
 import { homeOf, parseMode } from '../lib/modes.ts';
 import { Profiles } from '../lib/profiles.ts';
 import { TalentRoomViews, type ParlyRoomsClient, type StoredTalentRoom } from '../lib/roomViews.ts';
-import { statusOf } from '../lib/status.ts';
+import { filterSort, statusOf, type Filter, type Sort } from '../lib/status.ts';
 
 const room = (over: Partial<StoredTalentRoom> = {}): StoredTalentRoom => ({
   companyId: 'g-company', companyName: 'acme.dev', candidateId: 'g-cand', candidateAlias: 'Candidate #a1b2c3d4',
@@ -64,18 +64,34 @@ describe('Shyhire UI support', () => {
     await views.approve('g-me', 'hiring-old', 2);
     const after = (await views.listConversations('g-me')).find((r) => r.id === 'hiring-old')!;
     assert.equal(after.iApproved, true);
-    assert.equal(statusOf(after.status, { summaryReady: true, iApproved: after.iApproved }).label, 'Waiting for them');
+    assert.equal(statusOf(after.status, { summaryReady: true, iApproved: after.iApproved }).label, 'Agreed: waiting for their approval');
   });
 
-  it('maps room states to the plain status words', () => {
-    assert.equal(statusOf('talking').label, 'Talking');
-    assert.equal(statusOf('needs_decision', { needsMe: true }).label, 'Needs you');
-    assert.equal(statusOf('needs_decision').label, 'Waiting for them');
-    assert.equal(statusOf('talking', { summaryReady: true }).label, 'Ready to approve');
-    assert.equal(statusOf('talking', { theyDecide: true, summaryReady: true }).label, 'Waiting for them');
-    assert.equal(statusOf('agreed').label, 'Matched');
-    assert.equal(statusOf('closed').label, 'Ended');
-    assert.equal(statusOf('stuck').label, 'Ended');
+  it('maps room states to plain-language outcomes and filter buckets', () => {
+    const at = (...args: Parameters<typeof statusOf>) => { const { label, bucket } = statusOf(...args); return [label, bucket]; };
+    assert.deepEqual(at('talking'), ['Talking', 'talking']);
+    assert.deepEqual(at('needs_decision', { needsMe: true }), ['Needs your decision', 'needs_me']);
+    assert.deepEqual(at('needs_decision'), ['Waiting on the other side', 'talking']);
+    assert.deepEqual(at('talking', { summaryReady: true }), ['Agreed: waiting for your approval', 'needs_me']);
+    assert.deepEqual(at('talking', { summaryReady: true, iApproved: true }), ['Agreed: waiting for their approval', 'agreed']);
+    assert.deepEqual(at('talking', { theyDecide: true, summaryReady: true }), ['Waiting on the other side', 'talking']);
+    assert.deepEqual(at('agreed', { summaryReady: true, iApproved: true }), ['Agreed: contact details shared', 'agreed']);
+    assert.deepEqual(at('closed', { needsMe: true }), ['Closed: not a fit', 'ended']);
+    assert.deepEqual(at('stuck'), ["Stuck: the agents couldn't agree", 'ended']);
+  });
+
+  it('filters conversations by state and sorts by last updated or needs-me first', () => {
+    const rows = [
+      { id: 'old-needs', bucket: 'needs_me' as const, updatedAt: '2026-10-01T00:00:00.000Z' },
+      { id: 'new-talk', bucket: 'talking' as const, updatedAt: '2026-10-03T00:00:00.000Z' },
+      { id: 'mid-closed', bucket: 'ended' as const, updatedAt: '2026-10-02T00:00:00.000Z' },
+    ];
+    const ids = (f: Filter, s: Sort) => filterSort(rows, f, s).map((r) => r.id);
+    assert.deepEqual(ids('all', 'updated'), ['new-talk', 'mid-closed', 'old-needs']);
+    assert.deepEqual(ids('all', 'needs_me'), ['old-needs', 'new-talk', 'mid-closed']);
+    assert.deepEqual(ids('ended', 'updated'), ['mid-closed']);
+    assert.deepEqual(ids('agreed', 'updated'), []);
+    assert.deepEqual(rows.map((r) => r.id), ['old-needs', 'new-talk', 'mid-closed']);
   });
 
   it('checking a profile reports what saving would refuse, and neither saves nor lists the candidate', async () => {
