@@ -31,8 +31,8 @@ export interface RoleView extends Role {
   stats: { talking: number; needsYou: number; matched: number; total: number };
 }
 
-/** Conversations a new role opens right away, then a few more a day. */
-export const FIRST_FILL = 10, DAILY_FILL = 3;
+/** Conversations a new role opens right away, then a few more a day, never more than MAX_ACTIVE going at once. */
+export const FIRST_FILL = 5, DAILY_FILL = 3, MAX_ACTIVE = 5;
 /** Only candidates the search scores at least this (0-100) get contacted. */
 export const MIN_FIT = 60;
 // A little under a day, so the daily cron never skips a role that was filled a few minutes later yesterday.
@@ -110,9 +110,12 @@ export class Roles {
     // instead of skipping it for a day on an empty keyword fallback.
     if (degraded) { console.error(`role ${roleId}: search degraded, skipping fill (will retry)`); return 0; }
     // Anyone this company already talks to, for any role, isn't contacted again.
-    const busy = new Set([...role.contacted, ...(await this.rooms.listCompanyRooms(role.companyId)).map((r) => r.candidateAlias)]);
+    const rooms = await this.rooms.listCompanyRooms(role.companyId);
+    const busy = new Set([...role.contacted, ...rooms.map((r) => r.candidateAlias)]);
+    // Only the best few at a time: a slot frees up when a conversation is agreed or closed.
+    const active = rooms.filter((r) => r.roleId === roleId && r.status !== 'agreed' && r.status !== 'closed').length;
     // ponytail: keyword-search results have no score, so they never auto-open; only the AI search does.
-    const picks = profiles.filter((p) => p.score !== undefined && p.score >= MIN_FIT && !busy.has(p.alias)).slice(0, max);
+    const picks = profiles.filter((p) => p.score !== undefined && p.score >= MIN_FIT && !busy.has(p.alias)).slice(0, Math.max(0, Math.min(max, MAX_ACTIVE - active)));
     let opened = 0;
     for (const p of picks) {
       try {
