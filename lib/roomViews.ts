@@ -450,7 +450,7 @@ export class TalentRoomViews {
     const companyProfile = (await this.store.collection('profiles').doc(companyId).get()).data() as TalentProfile | undefined;
     const companyDomains = verifiedDomains(companyProfile?.verified ?? []);
     if (!companyDomains.length) {
-      throw new TalentError('forbidden', 'Verify your work email before opening a room');
+      throw new TalentError('forbidden', 'Verify your work email before starting a conversation. You can do it from your profile.');
     }
     const companyName = companyDomains[0]!;
 

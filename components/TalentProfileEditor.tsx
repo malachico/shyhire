@@ -237,7 +237,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       <div className="mt-6">{step === 1 && banner}</div>
       {step === 1 && experienceStep}
       {step === 2 && <div className="space-y-6">{factsEditor}{profileFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void checkStep2()}>{busy ? 'Checking…' : 'Continue'}</button><button className="muted text-sm underline" disabled={busy} onClick={() => { setError(''); setStep(1); }}>Back</button></div></div></div>}
-      {step === 3 && <div className="space-y-6">{preferenceFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Start getting matched'}</button><button className="muted text-sm underline" onClick={() => { setError(''); setStep(2); }}>Back</button></div></div></div>}
+      {step === 3 && <div className="space-y-6">{preferenceFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save and let companies find me'}</button><button className="muted text-sm underline" onClick={() => { setError(''); setStep(2); }}>Back</button></div></div></div>}
     </main>;
   }
 
