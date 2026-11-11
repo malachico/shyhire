@@ -93,8 +93,10 @@ export function RoleActions({ id, status }: { id: string; status: 'open' | 'paus
   const router = useRouter();
   const [pending, start] = useTransition();
   const set = (s: 'open' | 'paused' | 'closed') => start(async () => { await setRoleStatus(id, s); router.refresh(); });
-  return <div className="flex gap-3 text-sm">
-    <button type="button" className="underline underline-offset-4" disabled={pending} onClick={() => set(status === 'open' ? 'paused' : 'open')}>{status === 'open' ? 'Pause' : status === 'paused' ? 'Resume' : 'Reopen'}</button>
-    {status !== 'closed' && <button type="button" className="muted underline underline-offset-4" disabled={pending} onClick={() => set('closed')}>Close</button>}
+  const toggle = status === 'open' ? 'Pause role' : status === 'paused' ? 'Resume role' : 'Reopen role';
+  const icon = 'grid size-10 place-items-center rounded-xl border border-[var(--border)] text-base hover:bg-[var(--bg)] disabled:opacity-55';
+  return <div className="flex gap-2">
+    <button type="button" className={icon} title={toggle} aria-label={toggle} disabled={pending} onClick={() => set(status === 'open' ? 'paused' : 'open')}><span aria-hidden>{status === 'open' ? '⏸\uFE0E' : '▶\uFE0E'}</span></button>
+    {status !== 'closed' && <button type="button" className={`${icon} muted`} title="Close role" aria-label="Close role" disabled={pending} onClick={() => set('closed')}><span aria-hidden>✕</span></button>}
   </div>;
 }

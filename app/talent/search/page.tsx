@@ -49,7 +49,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
         <div className="flex flex-wrap gap-1.5 text-sm">
           <span className="pill">{r.stats.talking} talking</span>
           {r.stats.needsYou > 0 && <span className="pill pill-accent">{r.stats.needsYou} need{r.stats.needsYou === 1 ? 's' : ''} you</span>}
-          <span className="pill">{r.stats.matched} matched</span>
+          <span className="pill">{r.stats.matched} agreed</span>
           <span className="pill">{r.contacted.length} contacted</span>
         </div>
         <RoomList rooms={byRole[r.id] ?? []} />
@@ -65,7 +65,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
   }
   // The candidates this person already talks to: their card shows that conversation instead of "Talk".
   // Oldest first, so the newest room for a candidate is the one that stays.
-  const existing = Object.fromEntries((await roomViews().listCompanyRooms(session.sub).catch(() => [])).reverse().map((r) => [r.candidateAlias, { id: r.id, label: statusOf(r.status, { needsMe: !!r.needsDecision, summaryReady: r.documentVersion !== undefined, iApproved: r.iApproved }).label }]));
+  const existing = Object.fromEntries((await roomViews().listCompanyRooms(session.sub).catch(() => [])).reverse().map((r) => [r.candidateAlias, { id: r.id, label: statusOf(r.status, { needsMe: !!r.needsDecision, theyDecide: !!r.waitingOn && r.waitingOn !== 'company', summaryReady: r.documentVersion !== undefined, iApproved: r.iApproved }).label }]));
   const list = (await roles().list(session.sub)).filter((r) => r.status !== 'closed').map(({ id, title, status }) => ({ id, title, status }));
   return <main className="mx-auto max-w-3xl px-4 py-8">
     <SearchForm formClass="flex gap-2" className="input min-w-0 flex-1" defaultValue={q} aria-label="Describe the role" placeholder="Describe the role, e.g. backend engineer, Go, Postgres" button="Find" buttonClass="btn-primary" />
@@ -80,11 +80,11 @@ function RoomList({ rooms }: { rooms: CompanyRoomSummary[] }) {
   if (!rooms.length) return <p className="muted text-sm">No conversations yet.</p>;
   return <ul className="space-y-1">
     {rooms.map((m) => {
-      const s = statusOf(m.status, { needsMe: !!m.needsDecision, summaryReady: m.documentVersion !== undefined, iApproved: m.iApproved });
+      const s = statusOf(m.status, { needsMe: !!m.needsDecision, theyDecide: !!m.waitingOn && m.waitingOn !== 'company', summaryReady: m.documentVersion !== undefined, iApproved: m.iApproved });
       return <li key={m.id}>
         <a href={`/talent/conversations/${encodeURIComponent(m.id)}`} className="flex items-center justify-between gap-3 text-sm hover:underline">
           <span className="truncate">{m.candidateAlias}</span>
-          <span className={`${pillClass(s.tone)} shrink-0`}>{s.label}</span>
+          <span className={`${pillClass(s.tone)} max-w-[60%] text-right whitespace-normal!`}>{s.label}</span>
         </a>
       </li>;
     })}

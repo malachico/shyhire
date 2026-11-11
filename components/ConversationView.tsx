@@ -84,7 +84,7 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
       <button type="button" className="muted mt-4 text-sm underline" disabled={pending} onClick={pass}>Pass on this conversation</button>
     </section>}
 
-    {ended && <section className="card mt-6"><p className="font-medium">This conversation ended.</p><p className="muted mt-1 text-sm">No contact details were shared.</p></section>}
+    {ended && <section className="card mt-6"><p className="font-medium">{s.label}.</p><p className="muted mt-1 text-sm">{room.status === 'stuck' ? "The agents couldn't find terms that work for both sides. " : ''}No contact details were shared.</p></section>}
 
     {isCompany && room.brief && (room.brief.comp || room.brief.mustHaves || room.brief.location || room.brief.workModes?.length) && <details className="mt-6">
       <summary className="cursor-pointer text-sm font-medium">Your private brief</summary>
