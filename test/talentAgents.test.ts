@@ -86,6 +86,24 @@ describe('Standing roles', () => {
     await assert.rejects(roles.setStatus({ id: 'r-a', kind: 'human' }, role.id, 'open'), /No such role/);
   });
 
+  it('keeps at most MAX_ACTIVE conversations going per role, refilling a slot once one ends', async () => {
+    const { Roles, MAX_ACTIVE } = await import('../lib/roles.ts');
+    const db = testDb(), profiles = new Profiles(db), { c, opened } = client(), views = new TalentRoomViews(db, c);
+    const cands = [];
+    for (let i = 0; i < MAX_ACTIVE + 2; i++) cands.push(await profiles.save({ id: `cap-${i}`, kind: 'human' }, { version: 0, headline: 'Go', facts: ['Go engineer'] }));
+    const co = { id: 'cap-co', kind: 'human' as const };
+    await profiles.verify(co.id, { id: 'work-email:acme.test', source: 'work-email', label: 'w', verifiedAt: new Date().toISOString(), data: { domain: 'acme.test' } });
+    profiles.agentSearch = async () => cands.map((p, i) => ({ key: candidateAgentKey(p.alias), score: 95 - i, why: '' }));
+    const roles = new Roles(profiles, views, db);
+    const { role, opened: first } = await roles.create(co, { title: 'Go', looking: 'Go' });
+    assert.equal(first, MAX_ACTIVE);
+    assert.equal(await roles.fill(role.id, 3), 0); // full
+    const rooms = await db.collection('talent_rooms').where('roleId', '==', role.id).get();
+    await rooms.docs[0]!.ref.update({ status: 'closed' });
+    assert.equal(await roles.fill(role.id, 3), 1); // one slot freed
+    assert.equal(opened.length, MAX_ACTIVE + 1);
+  });
+
   it('carries location and work mode into the search and the company brief, and only the owner edits a role', async () => {
     const { Roles } = await import('../lib/roles.ts');
     const db = testDb(), profiles = new Profiles(db), { c, opened } = client(), views = new TalentRoomViews(db, c);
