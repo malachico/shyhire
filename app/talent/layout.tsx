@@ -15,7 +15,7 @@ export default async function TalentLayout({ children }: { children: React.React
   await profiles().rememberLogin(session);
   const mode = await currentMode();
   // A dot on Conversations when one is waiting on this person (a question or an approval).
-  const waiting = await roomViews().waitingCount(session.sub).catch(() => 0);
+  const waiting = await roomViews().waitingCount(session.sub).catch((e) => { console.error('waitingCount failed', e); return 0; });
   const tabs = mode === 'hire'
     ? [{ href: '/talent/search', label: 'Roles' }]
     : [{ href: '/talent/profile', label: 'Profile' }, { href: '/talent/conversations', label: 'Conversations' }];

@@ -10,6 +10,8 @@ import { SearchForm } from '@/components/SearchForm';
 
 export const dynamic = 'force-dynamic';
 
+const LOAD_FAILED = "Couldn't load your conversations. Try again.";
+
 export default async function Find({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {
   const session = await currentSession();
   if (!session) redirect('/');
@@ -31,15 +33,17 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
   if (!q) {
     const [list, rooms] = await Promise.all([
       roles().list(session.sub),
-      roomViews().listCompanyRooms(session.sub).catch((): CompanyRoomSummary[] => []),
+      roomViews().listCompanyRooms(session.sub).catch((e): null => { console.error('listCompanyRooms failed', e); return null; }),
     ]);
+    const roomsFailed = !rooms;
     // Conversations live under their role. A room whose role is gone (or absent) falls to "Other".
     const roleIds = new Set(list.map((r) => r.id));
-    const byRole: Record<string, typeof rooms> = {};
-    for (const m of rooms) (byRole[m.roleId && roleIds.has(m.roleId) ? m.roleId : '_'] ??= []).push(m);
+    const byRole: Record<string, CompanyRoomSummary[]> = {};
+    for (const m of rooms ?? []) (byRole[m.roleId && roleIds.has(m.roleId) ? m.roleId : '_'] ??= []).push(m);
     return <main className="mx-auto max-w-xl space-y-5 px-4 py-8">
       <h1 className="text-[28px] leading-none">Roles</h1>
       {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
+      {roomsFailed && <p role="alert" className="text-sm text-[var(--bad-fg)]">{LOAD_FAILED}</p>}
       <RoleForm first={!list.length} />
       {list.map((r) => <section key={r.id} aria-label={r.title} className="card space-y-3">
         <div className="flex items-start justify-between gap-3">
@@ -52,7 +56,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
           <span className="pill">{r.stats.matched} agreed</span>
           <span className="pill">{r.contacted.length} contacted</span>
         </div>
-        <RoomList rooms={byRole[r.id] ?? []} />
+        {!roomsFailed && <RoomList rooms={byRole[r.id] ?? []} />}
         <div className="flex items-center justify-end gap-3"><RoleActions id={r.id} status={r.status} /></div>
         <details><summary className="cursor-pointer text-sm font-medium">Edit</summary><RoleForm role={r} /></details>
       </section>)}
@@ -65,11 +69,13 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
   }
   // The candidates this person already talks to: their card shows that conversation instead of "Talk".
   // Oldest first, so the newest room for a candidate is the one that stays.
-  const existing = Object.fromEntries((await roomViews().listCompanyRooms(session.sub).catch(() => [])).reverse().map((r) => [r.candidateAlias, { id: r.id, label: statusOf(r.status, { needsMe: !!r.needsDecision, theyDecide: !!r.waitingOn && r.waitingOn !== 'company', summaryReady: r.documentVersion !== undefined, iApproved: r.iApproved }).label }]));
+  const mine = await roomViews().listCompanyRooms(session.sub).catch((e): null => { console.error('listCompanyRooms failed', e); return null; });
+  const existing = Object.fromEntries([...(mine ?? [])].reverse().map((r) => [r.candidateAlias, { id: r.id, label: statusOf(r.status, { needsMe: !!r.needsDecision, theyDecide: !!r.waitingOn && r.waitingOn !== 'company', summaryReady: r.documentVersion !== undefined, iApproved: r.iApproved }).label }]));
   const list = (await roles().list(session.sub)).filter((r) => r.status !== 'closed').map(({ id, title, status }) => ({ id, title, status }));
   return <main className="mx-auto max-w-3xl px-4 py-8">
     <SearchForm formClass="flex gap-2" className="input min-w-0 flex-1" defaultValue={q} aria-label="Describe the role" placeholder="Describe the role, e.g. backend engineer, Go, Postgres" button="Find" buttonClass="btn-primary" />
     {error && <p role="alert" className="mt-6 text-sm text-[var(--bad-fg)]">{error}</p>}
+    {!mine && <p role="alert" className="mt-6 text-sm text-[var(--bad-fg)]">{LOAD_FAILED}</p>}
     <a href="/talent/search" className="muted mb-4 inline-block text-sm">← Roles</a>
     {results && <CandidateResults results={results} query={q} existing={existing} roles={list} />}
   </main>;

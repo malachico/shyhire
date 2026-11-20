@@ -92,10 +92,17 @@ export function RoleForm({ first = false, role, talk }: { first?: boolean; role?
 export function RoleActions({ id, status }: { id: string; status: 'open' | 'paused' | 'closed' }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const set = (s: 'open' | 'paused' | 'closed') => start(async () => { await setRoleStatus(id, s); router.refresh(); });
+  const [error, setError] = useState('');
+  const set = (s: 'open' | 'paused' | 'closed') => { setError(''); start(async () => {
+    try {
+      const r = await setRoleStatus(id, s);
+      if ('error' in r && r.error) setError(r.error); else router.refresh();
+    } catch { setError('Could not change the role. Try again.'); }
+  }); };
   const toggle = status === 'open' ? 'Pause role' : status === 'paused' ? 'Resume role' : 'Reopen role';
   const icon = 'grid size-10 place-items-center rounded-xl border border-[var(--border)] text-base hover:bg-[var(--bg)] disabled:opacity-55';
-  return <div className="flex gap-2">
+  return <div className="flex items-center gap-2">
+    {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
     <button type="button" className={icon} title={toggle} aria-label={toggle} disabled={pending} onClick={() => set(status === 'open' ? 'paused' : 'open')}><span aria-hidden>{status === 'open' ? '⏸\uFE0E' : '▶\uFE0E'}</span></button>
     {status !== 'closed' && <button type="button" className={`${icon} muted`} title="Close role" aria-label="Close role" disabled={pending} onClick={() => set('closed')}><span aria-hidden>✕</span></button>}
   </div>;

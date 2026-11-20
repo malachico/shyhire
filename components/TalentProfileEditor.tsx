@@ -121,7 +121,8 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       const r = await setDiscoverable(!!saved.paused);
       if (r.error || !r.profile) setError(r.error ?? 'Could not change it.');
       else { setSaved(r.profile); setProfile((p) => ({ ...p, paused: r.profile!.paused })); }
-    } finally { setBusy(false); }
+    } catch { setError('Could not change it. Try again.'); }
+    finally { setBusy(false); }
   }
 
   const dirty = JSON.stringify({ ...profile, paused: saved.paused }) !== JSON.stringify(saved) || domains !== saved.employerDomains.join(', ') || locationsText !== saved.locations.join(', ') || salaryMin !== (saved.salary.min !== undefined ? String(saved.salary.min) : '') || currency !== saved.salary.currency;
