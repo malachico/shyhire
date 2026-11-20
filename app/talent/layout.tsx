@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AccountMenu } from '@/components/AccountMenu';
 import { AppIcon } from '@/components/Brand';
 import { DeleteAccount } from '@/components/DeleteAccount';
 import { NavTabs } from '@/components/NavTabs';
@@ -27,7 +28,7 @@ export default async function TalentLayout({ children }: { children: React.React
       <nav aria-label="Main" className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-4 px-4">
         <a href={tabs[0]!.href} aria-label="Shyhire"><AppIcon /></a>
         <NavTabs tabs={tabs} dot={waiting ? dotHref : undefined} />
-        <details className="relative">
+        <AccountMenu className="relative">
           <summary aria-label="Account menu" title={mode === 'hire' ? 'Account · hiring mode' : 'Account · job seeking mode'} className="flex size-8 cursor-pointer list-none items-center justify-center rounded-full border border-[var(--border)] text-sm font-medium">{initial}</summary>
           <div className="card absolute right-0 z-10 mt-2 w-60 space-y-1 p-2 text-sm">
             <p className="muted truncate px-2 py-1 text-xs">{session.email}</p>
@@ -40,7 +41,7 @@ export default async function TalentLayout({ children }: { children: React.React
             </form>
             <DeleteAccount />
           </div>
-        </details>
+        </AccountMenu>
       </nav>
     </header>
     {children}
