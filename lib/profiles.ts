@@ -467,7 +467,7 @@ export class Profiles {
     const name = [me.name, typeof linkedin?.name === 'string' ? linkedin.name : ''].filter(Boolean).join(' ');
     const found = privacyLeaks(summary, { name, email: me.email ?? '' }, profile.employerDomains);
     const employer = profile.experience.map((r) => r.company.trim()).find((c) => c.length > 1 && new RegExp(`(?<![\\p{L}\\p{N}])${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'iu').test(summary));
-    return employer ? [...found, employer] : found;
+    return employer && !found.includes(employer) ? [...found, employer] : found;
   }
   /** The AI writes what companies see from these (maybe unsaved) fields plus what is verified. */
   async summarize(caller: TalentCaller, raw: unknown, me: { name?: string; email?: string } = {}): Promise<{ facts: Fact[]; leaks: string[] }> {
