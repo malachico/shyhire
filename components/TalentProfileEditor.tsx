@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { Experience, Fact, ProfileDraft, TalentProfile, WorkMode } from '@/lib/talent';
 import { saveTalentProfile, setDiscoverable, writeSummary } from '@/lib/actions/talent';
 import { privacyLeaks } from '@/lib/privacy';
+import { MAX_PDF_BYTES, MAX_PDF_LABEL } from '@/lib/upload';
 import { Mark } from '@/components/Brand';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'ILS', 'CAD', 'AUD', 'CHF', 'SGD'] as const;
@@ -94,7 +95,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   async function importDraft() {
     setBusy(true); setError('');
     try {
-      if (file && (file.type !== 'application/pdf' || file.size > 3 * 1024 * 1024)) throw new Error('Choose a PDF up to 3 MB');
+      if (file && (file.type !== 'application/pdf' || file.size > MAX_PDF_BYTES)) throw new Error(`Choose a PDF up to ${MAX_PDF_LABEL}`);
       const pdf = file ? btoa(Array.from(new Uint8Array(await file.arrayBuffer()), (b) => String.fromCharCode(b)).join('')) : undefined;
       const res = await fetch('/api/talent/draft', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pdf ? { pdf } : source.trim() ? { text: source } : {}) });
       const r = await res.json() as { draft?: ProfileDraft; error?: string };
@@ -230,7 +231,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       </div>
       {rewriteError && <p role="alert" className="mt-3 rounded-lg bg-[var(--bad-bg)] p-3 text-sm text-[var(--bad-fg)]">{rewriteError}</p>}
     </div>
-    {!!leaks.length && <p role="alert" className="rounded-lg bg-[#fffaeb] p-3 text-sm text-[#93370d]">This mentions {leaks.join(', ')}. Companies see these facts, so remove it before saving.</p>}
+    {!!leaks.length && <p id="leak-warning" role="alert" className="rounded-lg bg-[#fffaeb] p-3 text-sm text-[#93370d]">This mentions {leaks.join(', ')}. Companies see these facts, so remove it before saving.</p>}
   </section>;
 
   if (!onboarded) {
@@ -241,12 +242,13 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       <h1 className="mt-6 text-2xl font-semibold tracking-tight">{titles[step]}</h1>
       <div className="mt-6">{step === 1 && banner}</div>
       {step === 1 && experienceStep}
-      {step === 2 && <div className="space-y-6">{factsEditor}{profileFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void checkStep2()}>{busy ? 'Checking…' : 'Continue'}</button><button className="muted text-sm underline" disabled={busy} onClick={() => { setError(''); setStep(1); }}>Back</button></div></div></div>}
+      {step === 2 && <div className="space-y-6">{factsEditor}{profileFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy || !!leaks.length} aria-describedby={leaks.length ? 'leak-warning' : undefined} onClick={() => void checkStep2()}>{busy ? 'Checking…' : 'Continue'}</button><button className="muted text-sm underline" disabled={busy} onClick={() => { setError(''); setStep(1); }}>Back</button></div></div></div>}
       {step === 3 && <div className="space-y-6">{preferenceFields}<div>{banner}<div className="flex items-center gap-4"><button className="btn-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save and let companies find me'}</button><button className="muted text-sm underline" onClick={() => { setError(''); setStep(2); }}>Back</button></div></div></div>}
     </main>;
   }
 
   const has = (src: string) => profile.verified.some((v) => v.source === src);
+  const leakShown = !!leaks.length && editing === 'facts';
   const accounts = [
     { name: 'Google', status: me.email || 'Signed in', done: true },
     ...(workEmailAvailable ? [{ name: 'Work email', status: has('work-email') ? 'Verified' : 'Shows companies you work in tech', done: has('work-email'), href: '/talent/verify/work-email' }] : []),
@@ -318,7 +320,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
         <span className="muted text-sm">Unsaved changes</span>
         <div className="flex gap-2">
           <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => { setProfile(saved); setDomains(saved.employerDomains.join(', ')); setLocationsText(saved.locations.join(', ')); setSalaryMin(saved.salary.min !== undefined ? String(saved.salary.min) : ''); setCurrency(saved.salary.currency); setEditing(''); }}>Discard</button>
-          <button type="button" className="btn-primary min-h-10" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="button" className="btn-primary min-h-10" disabled={busy || leakShown} aria-describedby={leakShown ? 'leak-warning' : undefined} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>
         </div>
       </div>
     </div>}

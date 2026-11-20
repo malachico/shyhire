@@ -1,6 +1,7 @@
 import { currentSession } from '@/lib/auth';
 import { TalentError } from '@/lib/profiles';
 import { profiles } from '@/lib/talent';
+import { MAX_DRAFT_BODY_BYTES, MAX_PDF_LABEL } from '@/lib/upload';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,9 +21,9 @@ export async function POST(request: Request) {
     const { value, done } = await reader.read();
     if (done) break;
     size += value.length;
-    if (size > 4 * 1024 * 1024 + 100_000) {
+    if (size > MAX_DRAFT_BODY_BYTES) {
       await reader.cancel();
-      return Response.json({ error: 'Choose a PDF up to 3 MB' }, { status: 413 });
+      return Response.json({ error: `Choose a PDF up to ${MAX_PDF_LABEL}` }, { status: 413 });
     }
     chunks.push(value);
   }
