@@ -1,6 +1,6 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { Mark } from '@/components/Brand';
 import { talkAboutRole } from '@/lib/actions/roles';
 import { RoleForm } from '@/components/Roles';
@@ -16,6 +16,15 @@ export function CandidateResults({ results, query, existing, roles }: { results:
   const [roleId, setRoleId] = useState(roles[0]?.id ?? '');
   const [error, setError] = useState<string>();
   const [pending, start] = useTransition();
+  const dialog = useRef<HTMLDialogElement>(null);
+
+  // Native modal: traps focus, closes on Escape and returns focus to the Talk button.
+  useEffect(() => {
+    const d = dialog.current;
+    if (!d) return;
+    if (alias && !d.open) d.showModal();
+    else if (!alias && d.open) d.close();
+  }, [alias]);
 
   function startTalk(e: React.FormEvent) {
     e.preventDefault();
@@ -53,8 +62,8 @@ export function CandidateResults({ results, query, existing, roles }: { results:
       })}
     </ul>
     {results.capped && <p className="muted mt-4 text-center text-xs">Showing the best 20 matches.</p>}
-    {alias && <div role="dialog" aria-modal="true" aria-labelledby="talk-title" className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 sm:items-center" onClick={(e) => e.target === e.currentTarget && !pending && setAlias(undefined)}>
-      <div className="max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-t-2xl bg-[var(--surface)] p-5 sm:rounded-2xl">
+    <dialog ref={dialog} aria-labelledby="talk-title" className="m-auto mb-0 max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-[var(--surface)] text-[var(--fg)] backdrop:bg-black/30 sm:mb-auto sm:rounded-2xl" onCancel={(e) => pending && e.preventDefault()} onClose={() => setAlias(undefined)} onClick={(e) => e.target === e.currentTarget && !pending && setAlias(undefined)}>
+      {alias && <div className="space-y-4 p-5">
         <div className="flex items-center gap-3">
           <Mark size={44} />
           <div>
@@ -75,7 +84,7 @@ export function CandidateResults({ results, query, existing, roles }: { results:
             </div>
           </form>
           : <RoleForm talk={{ alias, query, onCancel: () => setAlias(undefined) }} />}
-      </div>
-    </div>}
+      </div>}
+    </dialog>
   </>;
 }
