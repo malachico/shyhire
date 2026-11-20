@@ -150,9 +150,14 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
     </p>
   </section>;
 
+  const aboutField = <label className="field">About<textarea className="input min-h-24" maxLength={6000} value={profile.about} onChange={(e) => change({ about: e.target.value })} /></label>;
+  const optionalFields = <>
+    <label className="field">Open to<input className="input" maxLength={500} value={profile.openTo} onChange={(e) => change({ openTo: e.target.value })} placeholder="Full-time, contract" /></label>
+    <label className="field">Never show me to<input className="input" value={domains} onChange={(e) => { setDomains(e.target.value); setNotice(''); }} placeholder="current-employer.com" /><span className="hint block">Companies on these domains, and your verified work domain, never see you.</span></label>
+  </>;
   const profileFields = <fieldset disabled={busy} className="space-y-4">
     <label className="field">Headline<input className="input" maxLength={200} value={profile.headline} onChange={(e) => change({ headline: e.target.value })} placeholder="Senior backend engineer, Go and Postgres" /></label>
-    <label className="field">About<textarea className="input min-h-24" maxLength={6000} value={profile.about} onChange={(e) => change({ about: e.target.value })} /></label>
+    {onboarded && aboutField}
     {profile.experience.map((r, i) => <div key={r.id} className="card space-y-3" aria-label={`Role ${i + 1}`}>
       <label className="field">Role<input className="input" maxLength={200} value={r.title} onChange={(e) => role(r.id, { title: e.target.value })} /></label>
       <div className="grid grid-cols-2 gap-3">
@@ -163,8 +168,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       <div className="flex justify-between text-sm"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={r.hidden} onChange={(e) => role(r.id, { hidden: e.target.checked })} /> Hide from matching</label><button type="button" className="muted underline" onClick={() => change({ experience: profile.experience.filter((x) => x.id !== r.id) })}>Remove</button></div>
     </div>)}
     <button type="button" className="btn text-sm" disabled={profile.experience.length >= 40} onClick={() => change({ experience: [...profile.experience, { id: crypto.randomUUID(), title: '', company: '', start: '', end: '', description: '', hidden: false, source: 'self' }] })}>Add a role</button>
-    <label className="field">Open to<input className="input" maxLength={500} value={profile.openTo} onChange={(e) => change({ openTo: e.target.value })} placeholder="Full-time, contract" /></label>
-    <label className="field">Never show me to<input className="input" value={domains} onChange={(e) => { setDomains(e.target.value); setNotice(''); }} placeholder="current-employer.com" /><span className="hint block">Companies on these domains, and your verified work domain, never see you.</span></label>
+    {onboarded ? optionalFields : <details><summary className="cursor-pointer text-sm font-medium">More (optional)</summary><div className="mt-4 space-y-4">{aboutField}{optionalFields}</div></details>}
   </fieldset>;
 
   const preferenceFields = <fieldset disabled={busy} className="space-y-4">
