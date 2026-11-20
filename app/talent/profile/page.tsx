@@ -4,6 +4,7 @@ import { githubConfigured } from '@/lib/github';
 import { linkedinConfigured } from '@/lib/linkedin';
 import { profileImportConfigured, profiles, workEmailConfigured } from '@/lib/talent';
 import { verifiedFacts } from '@/lib/profiles';
+import { profileErrorMessage } from '@/lib/profileError';
 import { TalentProfileEditor } from '@/components/TalentProfileEditor';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ export default async function Profile({ searchParams }: { searchParams: Promise<
     initial={initial}
     verifiedFacts={verifiedFacts(initial)}
     me={{ name: session.name ?? '', email: session.email ?? '' }}
-    error={error}
+    error={profileErrorMessage(error)}
     githubAvailable={githubConfigured()}
     linkedinAvailable={linkedinConfigured()}
     workEmailAvailable={workEmailConfigured()}
