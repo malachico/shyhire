@@ -17,10 +17,9 @@ export default async function TalentLayout({ children }: { children: React.React
   // A dot on Conversations when one is waiting on this person (a question or an approval).
   const waiting = await roomViews().waitingCount(session.sub).catch((e) => { console.error('waitingCount failed', e); return 0; });
   const tabs = mode === 'hire'
-    ? [{ href: '/talent/search', label: 'Roles' }]
+    ? [{ href: '/talent/search', label: 'Roles' }, { href: '/talent/search#browse', label: 'Search' }, { href: '/talent/conversations', label: 'Conversations' }]
     : [{ href: '/talent/profile', label: 'Profile' }, { href: '/talent/conversations', label: 'Conversations' }];
-  // The dot must sit on a tab that exists: for a hirer the only tab is Roles.
-  const dotHref = mode === 'hire' ? '/talent/search' : '/talent/conversations';
+  const dotHref = '/talent/conversations';
   const initial = (session.name || session.email || '?').trim().charAt(0).toUpperCase();
   return <div className="min-h-dvh">
     <header className="border-b border-[var(--border)] bg-[var(--surface)]">
@@ -28,11 +27,12 @@ export default async function TalentLayout({ children }: { children: React.React
         <a href={tabs[0]!.href} aria-label="Shyhire"><AppIcon /></a>
         <NavTabs tabs={tabs} dot={waiting ? dotHref : undefined} />
         <details className="relative">
-          <summary aria-label="Account menu" className="flex size-8 cursor-pointer list-none items-center justify-center rounded-full border border-[var(--border)] text-sm font-medium">{initial}</summary>
+          <summary aria-label="Account menu" title={mode === 'hire' ? 'Account · hiring mode' : 'Account · job seeking mode'} className="flex size-8 cursor-pointer list-none items-center justify-center rounded-full border border-[var(--border)] text-sm font-medium">{initial}</summary>
           <div className="card absolute right-0 z-10 mt-2 w-60 space-y-1 p-2 text-sm">
             <p className="muted truncate px-2 py-1 text-xs">{session.email}</p>
+            <p className="muted px-2 py-1 text-xs">{mode === 'hire' ? 'You are hiring: roles and candidates.' : 'You are looking for work: your profile and conversations.'}</p>
             <form action={switchMode.bind(null, mode === 'hire' ? 'work' : 'hire')}>
-              <button className="w-full rounded-lg px-2 py-2 text-left hover:bg-[var(--bg)]">{mode === 'hire' ? 'Switch to looking for work' : 'Switch to hiring'}</button>
+              <button title={mode === 'hire' ? 'Show your profile and conversations as a job seeker' : 'Show your roles and candidate search as a hirer'} className="w-full rounded-lg px-2 py-2 text-left hover:bg-[var(--bg)]">{mode === 'hire' ? 'Switch to job seeking' : 'Switch to hiring'}</button>
             </form>
             <form action="/talent/auth/signout" method="post">
               <button className="w-full rounded-lg px-2 py-2 text-left hover:bg-[var(--bg)]">Sign out</button>
