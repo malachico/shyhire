@@ -80,7 +80,7 @@ export function CandidateResults({ results, query, existing, roles }: { results:
             {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
             <div className="flex items-center justify-end gap-3">
               <button type="button" className="btn" disabled={pending} onClick={() => setAlias(undefined)}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={pending}>{pending ? 'Starting…' : 'Start'}</button>
+              <button type="submit" className="btn-primary" disabled={pending}>{pending ? 'Starting…' : 'Start conversation'}</button>
             </div>
           </form>
           : <RoleForm talk={{ alias, query, onCancel: () => setAlias(undefined) }} />}

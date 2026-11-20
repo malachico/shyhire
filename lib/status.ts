@@ -14,8 +14,8 @@ export function statusOf(status: RoomStatus, o: { needsMe?: boolean; theyDecide?
   if (status === 'stuck') return { label: "Stuck: the agents couldn't agree", tone: 'plain', bucket: 'ended' };
   if (o.needsMe) return { label: 'Needs your decision', tone: 'accent', bucket: 'needs_me' };
   if (status === 'needs_decision' || o.theyDecide) return { label: 'Waiting on the other side', tone: 'plain', bucket: 'talking' };
-  if (o.summaryReady && o.iApproved) return { label: 'Agreed: waiting for their approval', tone: 'plain', bucket: 'agreed' };
-  if (o.summaryReady) return { label: 'Agreed: waiting for your approval', tone: 'accent', bucket: 'needs_me' };
+  if (o.summaryReady && o.iApproved) return { label: 'You approved: waiting for theirs', tone: 'plain', bucket: 'agreed' };
+  if (o.summaryReady) return { label: 'Summary ready: waiting for your approval', tone: 'accent', bucket: 'needs_me' };
   return { label: 'Talking', tone: 'plain', bucket: 'talking' };
 }
 

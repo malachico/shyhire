@@ -64,7 +64,7 @@ describe('Shyhire UI support', () => {
     await views.approve('g-me', 'hiring-old', 2);
     const after = (await views.listConversations('g-me')).find((r) => r.id === 'hiring-old')!;
     assert.equal(after.iApproved, true);
-    assert.equal(statusOf(after.status, { summaryReady: true, iApproved: after.iApproved }).label, 'Agreed: waiting for their approval');
+    assert.equal(statusOf(after.status, { summaryReady: true, iApproved: after.iApproved }).label, 'You approved: waiting for theirs');
   });
 
   it('maps room states to plain-language outcomes and filter buckets', () => {
@@ -72,8 +72,8 @@ describe('Shyhire UI support', () => {
     assert.deepEqual(at('talking'), ['Talking', 'talking']);
     assert.deepEqual(at('needs_decision', { needsMe: true }), ['Needs your decision', 'needs_me']);
     assert.deepEqual(at('needs_decision'), ['Waiting on the other side', 'talking']);
-    assert.deepEqual(at('talking', { summaryReady: true }), ['Agreed: waiting for your approval', 'needs_me']);
-    assert.deepEqual(at('talking', { summaryReady: true, iApproved: true }), ['Agreed: waiting for their approval', 'agreed']);
+    assert.deepEqual(at('talking', { summaryReady: true }), ['Summary ready: waiting for your approval', 'needs_me']);
+    assert.deepEqual(at('talking', { summaryReady: true, iApproved: true }), ['You approved: waiting for theirs', 'agreed']);
     assert.deepEqual(at('talking', { theyDecide: true, summaryReady: true }), ['Waiting on the other side', 'talking']);
     assert.deepEqual(at('agreed', { summaryReady: true, iApproved: true }), ['Agreed: contact details shared', 'agreed']);
     assert.deepEqual(at('closed', { needsMe: true }), ['Closed: not a fit', 'ended']);
