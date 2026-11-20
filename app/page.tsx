@@ -2,12 +2,13 @@ import { redirect } from 'next/navigation';
 import { AppIcon, Mark, Wordmark } from '@/components/Brand';
 import { currentSession } from '@/lib/auth';
 import { currentMode, homeOf } from '@/lib/mode';
+import { signInErrorMessage } from '@/lib/signInError';
 
 const Arrow = ({ color }: { color: string }) => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>;
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ error?: string | string[] }> }) {
   if (await currentSession()) redirect(homeOf(await currentMode()));
-  const { error } = await searchParams;
+  const message = signInErrorMessage((await searchParams).error);
   return <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-7 px-6 py-7">
     <div className="flex items-center gap-2"><AppIcon /><Wordmark /></div>
     <div className="flex justify-center pt-2"><Mark size={168} label="The Shyhire creature holding out a flower" /></div>
@@ -15,7 +16,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
       <h1 className="text-[38px] leading-[1.02] [text-wrap:balance]">Let your work introduce you.</h1>
       <p className="muted text-base">Agents check the fit first. Names stay private until both sides say yes.</p>
     </div>
-    {error && <p role="alert" className="rounded-xl bg-[var(--bad-bg)] p-3 text-sm text-[var(--bad-fg)]">{error}</p>}
+    {message && <p role="alert" className="rounded-xl bg-[var(--bad-bg)] p-3 text-sm text-[var(--bad-fg)]">{message}</p>}
     <div className="grid gap-3">
       <a href="/talent/auth/google/start?as=work" className="flex min-h-[76px] items-center justify-between gap-3 rounded-[18px] bg-[var(--ink)] px-[18px] py-4 text-[var(--bg)] hover:bg-[#2b2b2b]">
         <span><span className="block text-[17px] font-semibold">I&apos;m looking for work</span><span className="block text-[13px] text-[#CFC8BD]">Your name stays private until you say yes</span></span>
