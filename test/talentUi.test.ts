@@ -116,6 +116,14 @@ describe('Shyhire UI support', () => {
     assert.deepEqual(privacyLeaks('a great team', me, ['a.io']), [], 'short domain words are not matched alone');
   });
 
+  it('warns about pay figures and employers named outside the experience list', () => {
+    const me = { name: 'Dana Levi', email: 'dana@gmail.com' };
+    for (const pay of ['Earning $180k today', 'Wants 180,000 USD', 'Paid ₪30k/month']) assert.deepEqual(privacyLeaks(pay, me, []), ['a pay figure'], pay);
+    assert.deepEqual(privacyLeaks('Built payments at Globex for 5 years', me, []), ['Globex']);
+    assert.deepEqual(privacyLeaks('I worked for Initech Labs on billing', me, []), ['Initech Labs']);
+    assert.deepEqual(privacyLeaks('Scaled to 100,000 users since 2019 with Go at scale', me, []), [], 'plain counts, years and lowercase words are fine');
+  });
+
   it("the candidate's agent is never told their employers, links or emails", () => {
     assert.equal(redact('Led payments at Acme Corp (acme.com), see https://x.dev or dana@acme.com', ['Acme Corp', 'acme.com']), 'Led payments at [employer] ([employer]), see [link] or [email]');
     assert.equal(redact('Academic work', ['acme.com']), 'Academic work', 'only whole words');
