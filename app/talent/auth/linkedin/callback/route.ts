@@ -5,6 +5,7 @@ import { currentSession } from '@/lib/auth';
 import { appUrl } from '@/lib/github';
 import { LINKEDIN_FLOW_COOKIE, linkedinAccount, linkedinConfigured } from '@/lib/linkedin';
 import { TalentError } from '@/lib/profiles';
+import { connectErrorCode } from '@/lib/profileError';
 import { profiles } from '@/lib/talent';
 
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
   const session = await currentSession();
   if (!session) return NextResponse.redirect(new URL('/talent/profile', base));
   if (!linkedinConfigured()) {
-    return NextResponse.redirect(`${base}/talent/profile?error=${encodeURIComponent('LinkedIn connection is not configured.')}`);
+    return NextResponse.redirect(`${base}/talent/profile?error=linkedin_not_configured`);
   }
   const params = new URL(request.url).searchParams;
   const code = params.get('code') ?? '';
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
     await profiles().verify(session.sub, account.verification);
     return NextResponse.redirect(`${base}/talent/profile`);
   } catch (error) {
-    const msg = error instanceof TalentError ? error.message : 'LinkedIn connection failed. Please try again.';
-    return NextResponse.redirect(`${base}/talent/profile?error=${encodeURIComponent(msg)}`);
+    const code = connectErrorCode('linkedin', error instanceof TalentError ? error.code : undefined);
+    return NextResponse.redirect(`${base}/talent/profile?error=${code}`);
   }
 }

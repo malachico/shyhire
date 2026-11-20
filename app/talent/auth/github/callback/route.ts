@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { currentSession } from '@/lib/auth';
 import { appUrl, GITHUB_FLOW_COOKIE, githubAccount, githubConfigured } from '@/lib/github';
 import { TalentError } from '@/lib/profiles';
+import { connectErrorCode } from '@/lib/profileError';
 import { profiles } from '@/lib/talent';
 
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
   const session = await currentSession();
   if (!session) return NextResponse.redirect(new URL('/talent/profile', base));
   if (!githubConfigured()) {
-    return NextResponse.redirect(`${base}/talent/profile?error=${encodeURIComponent('GitHub connection is not configured.')}`);
+    return NextResponse.redirect(`${base}/talent/profile?error=github_not_configured`);
   }
   const params = new URL(request.url).searchParams;
   const code = params.get('code') ?? '';
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
     await profiles().recordContact(session.sub, { githubLogin: account.login });
     return NextResponse.redirect(`${base}/talent/profile`);
   } catch (error) {
-    const msg = error instanceof TalentError ? error.message : 'GitHub connection failed. Please try again.';
-    return NextResponse.redirect(`${base}/talent/profile?error=${encodeURIComponent(msg)}`);
+    const code = connectErrorCode('github', error instanceof TalentError ? error.code : undefined);
+    return NextResponse.redirect(`${base}/talent/profile?error=${code}`);
   }
 }
