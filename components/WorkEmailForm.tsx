@@ -33,7 +33,8 @@ export function WorkEmailForm({ next, hiring }: { next: { href: string; label: s
   }
 
   return <main className="mx-auto max-w-md px-4 py-12">
-    <h1 className="text-2xl font-semibold tracking-tight">Verify your work email</h1>
+    <a href={next.href} className="muted text-sm underline">Back</a>
+    <h1 className="mt-4 text-2xl font-semibold tracking-tight">Verify your work email</h1>
     <p className="muted mt-2 text-sm">{hiring ? 'Candidates see your company name once you both approve, so it has to be real.' : 'Adds a "Work email verified" badge. Your domain stays private and that employer is blocked from finding you.'}</p>
     {error && <p role="alert" className="mt-5 rounded-lg bg-[var(--bad-bg)] p-3 text-sm text-[var(--bad-fg)]">{error}</p>}
     {verified ? <div role="status" className="card mt-6">
@@ -51,5 +52,7 @@ export function WorkEmailForm({ next, hiring }: { next: { href: string; label: s
         <button type="button" className="underline disabled:no-underline" disabled={busy || wait > 0} onClick={() => void send(sentTo)}>{wait > 0 ? `Resend in ${wait}s` : 'Send a new code'}</button>
       </p>
     </form>}
+    {/* Optional for candidates (just a badge); companies can't search until verified, so no skip for them. */}
+    {!verified && !hiring && <p className="mt-6 text-sm"><a href={next.href} className="muted underline">Skip for now</a></p>}
   </main>;
 }

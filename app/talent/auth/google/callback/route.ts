@@ -13,7 +13,7 @@ const back = (msg: string) => NextResponse.redirect(`${appUrl()}/?error=${encode
 
 /** Google posts the signed ID token here (form_post). */
 export async function POST(request: Request) {
-  if (!googleConfigured()) return new NextResponse('Google sign-in is not configured', { status: 503 });
+  if (!googleConfigured()) return NextResponse.redirect(new URL('/?error=auth_unavailable', request.url), 303);
   const jar = await cookies();
   const raw = jar.get(GOOGLE_FLOW_COOKIE)?.value;
   jar.set(GOOGLE_FLOW_COOKIE, '', { httpOnly: true, secure: appUrl().startsWith('https:'), sameSite: 'lax', path: '/talent/auth/google', maxAge: 0 });
