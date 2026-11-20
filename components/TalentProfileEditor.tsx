@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { Experience, Fact, ProfileDraft, TalentProfile, WorkMode } from '@/lib/talent';
 import { saveTalentProfile, setDiscoverable, writeSummary } from '@/lib/actions/talent';
 import { privacyLeaks } from '@/lib/privacy';
+import { legacyDate, monthValue } from '@/lib/months';
 import { MAX_PDF_BYTES, MAX_PDF_LABEL } from '@/lib/upload';
 import { Mark } from '@/components/Brand';
 
@@ -46,6 +47,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   const [file, setFile] = useState<File>();
   const [pasting, setPasting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [writing, setWriting] = useState(false);
   const [error, setError] = useState(initialError ?? '');
   const [notice, setNotice] = useState('');
   const [justFinished, setJustFinished] = useState(false);
@@ -106,14 +108,14 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   }
 
   async function rewrite() {
-    setBusy(true); setRewriteError('');
+    setBusy(true); setWriting(true); setRewriteError('');
     try {
       const { headline, about, experience, openTo, details } = profile;
       const r = await writeSummary({ headline, about, experience, openTo, ...(details ? { details } : {}) });
       if ('error' in r && r.error) setRewriteError(r.error);
       else if ('facts' in r) change({ facts: r.facts });
     } catch { setRewriteError('Could not write it. Try again, or write it yourself.'); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setWriting(false); }
   }
 
   async function toggleOpen() {
@@ -162,8 +164,8 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
     {profile.experience.map((r, i) => <div key={r.id} className="card space-y-3" aria-label={`Role ${i + 1}`}>
       <label className="field">Role<input className="input" maxLength={200} value={r.title} onChange={(e) => role(r.id, { title: e.target.value })} /></label>
       <div className="grid grid-cols-2 gap-3">
-        <label className="field">From<input className="input" maxLength={30} value={r.start} onChange={(e) => role(r.id, { start: e.target.value })} /></label>
-        <label className="field">To<input className="input" maxLength={30} value={r.end} onChange={(e) => role(r.id, { end: e.target.value })} placeholder="Present" /></label>
+        <label className="field">From<input type="month" className="input" placeholder="YYYY-MM" value={monthValue(r.start)} onChange={(e) => role(r.id, { start: e.target.value })} />{legacyDate(r.start) && <span className="hint block">Saved as “{legacyDate(r.start)}”</span>}</label>
+        <label className="field">To<input type="month" className="input" placeholder="YYYY-MM" value={monthValue(r.end)} onChange={(e) => role(r.id, { end: e.target.value })} /><span className="hint block">{legacyDate(r.end) ? `Saved as “${legacyDate(r.end)}”` : 'Leave empty if you still work here.'}</span></label>
       </div>
       <label className="field">What you did<textarea className="input min-h-20" maxLength={4000} value={r.description} onChange={(e) => role(r.id, { description: e.target.value })} /></label>
       <div className="flex justify-between text-sm"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={r.hidden} onChange={(e) => role(r.id, { hidden: e.target.checked })} /> Hide from matching</label><button type="button" className="muted underline" onClick={() => change({ experience: profile.experience.filter((x) => x.id !== r.id) })}>Remove</button></div>
@@ -227,7 +229,7 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       </li>)}</ul>
       <div className="mt-3 flex flex-wrap gap-2">
         {profile.facts.length < 10 && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => change({ facts: [...profile.facts, { id: crypto.randomUUID(), text: '', source: 'cv' }] })}>+ Add a fact</button>}
-        {importAvailable && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => void rewrite()}>{busy ? 'Writing…' : '✨ Write with AI'}</button>}
+        {importAvailable && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => void rewrite()}>{writing ? 'Writing…' : '✨ Write with AI'}</button>}
       </div>
       {rewriteError && <p role="alert" className="mt-3 rounded-lg bg-[var(--bad-bg)] p-3 text-sm text-[var(--bad-fg)]">{rewriteError}</p>}
     </div>
