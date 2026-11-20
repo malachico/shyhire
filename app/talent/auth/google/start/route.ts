@@ -6,7 +6,7 @@ import { GOOGLE_FLOW_COOKIE, googleClient, googleConfigured } from '@/lib/google
 import { parseMode } from '@/lib/mode';
 
 export async function GET(request: Request) {
-  if (!googleConfigured()) return new NextResponse('Google sign-in is not configured', { status: 503 });
+  if (!googleConfigured()) return NextResponse.redirect(new URL('/?error=auth_unavailable', request.url));
   const mode = parseMode(new URL(request.url).searchParams.get('as'));
   const state = randomBytes(24).toString('base64url');
   const nonce = randomBytes(24).toString('base64url');
