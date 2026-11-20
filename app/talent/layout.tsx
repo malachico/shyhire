@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AppIcon } from '@/components/Brand';
+import { DeleteAccount } from '@/components/DeleteAccount';
 import { NavTabs } from '@/components/NavTabs';
 import { currentSession } from '@/lib/auth';
 import { switchMode } from '@/lib/actions/talent';
@@ -37,6 +38,7 @@ export default async function TalentLayout({ children }: { children: React.React
             <form action="/talent/auth/signout" method="post">
               <button className="w-full rounded-lg px-2 py-2 text-left hover:bg-[var(--bg)]">Sign out</button>
             </form>
+            <DeleteAccount />
           </div>
         </details>
       </nav>
