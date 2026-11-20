@@ -36,6 +36,7 @@ export async function POST(request: Request) {
     return Response.json({ draft: await profiles().draft(session.sub, body) });
   } catch (error) {
     if (error instanceof TalentError) return Response.json({ error: error.message }, { status: error.status });
-    throw error;
+    console.error('draft failed', error);
+    return Response.json({ error: 'Could not read it. Nothing was changed.' }, { status: 500 });
   }
 }
