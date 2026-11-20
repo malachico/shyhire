@@ -13,6 +13,7 @@ describe('Company room view while blind', () => {
       employerDomains: ['globex.io'],
       verified: [{ id: 'linkedin', source: 'linkedin', label: 'LinkedIn', verifiedAt: '2026-10-29T05:00:00.000Z', data: { name: 'Dana Reyes' } }],
     });
+    const leak = 'Dana Reyes at Globex (globex.io, https://dana.example/cv, dana@globex.io) earns $180k, wants 180,000 or ₪30k/month';
     const stored: StoredTalentRoom = {
       companyId: 'gh-comp-redact',
       companyName: 'acme.dev',
@@ -20,12 +21,13 @@ describe('Company room view while blind', () => {
       candidateAlias: 'Candidate #11223344',
       brief: { role: 'Staff Engineer', comp: '', mustHaves: '' },
       status: 'needs_decision',
+      needsDecision: { side: 'company', question: 'Decide: LEAK', options: ['Offer LEAK', 'Pass'] },
       createdAt: '2026-10-29T05:00:00.000Z',
       updatedAt: '2026-10-29T05:10:00.000Z',
     };
+    stored.needsDecision!.question = `Decide: ${leak}`;
+    stored.needsDecision!.options = [`Offer ${leak}`, 'Pass'];
     await db.collection('talent_rooms').doc('room-redact').set(stored);
-
-    const leak = 'Dana Reyes at Globex (globex.io, https://dana.example/cv, dana@globex.io) earns $180k, wants 180,000 or ₪30k/month';
     const room: Room = {
       id: 'room-redact',
       goal: `Goal: ${leak}`,
@@ -51,6 +53,11 @@ describe('Company room view while blind', () => {
     assert.equal(blind.needsDecision?.options[1], 'Pass');
     assert.equal(blind.candidateAlias, 'Candidate #11223344');
     assert.equal(blind.messages[0]!.from, 'Candidate #11223344 agent');
+
+    const listed = (await views.listCompanyRooms('gh-comp-redact')).find((r) => r.id === 'room-redact');
+    assert.match(listed?.needsDecision?.question ?? '', /^Decide: /);
+    assert.doesNotMatch(JSON.stringify(listed?.needsDecision), /Dana|Reyes|Globex|globex\.io|https?:|dana\.example|@globex|180|30k/i);
+    assert.equal(listed?.needsDecision?.options[1], 'Pass');
 
     room.status = 'agreed';
     room.pending = [];

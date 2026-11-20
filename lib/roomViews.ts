@@ -658,11 +658,18 @@ export class TalentRoomViews {
   async listCompanyRooms(caller: TalentCaller): Promise<CompanyRoomSummary[]> {
     const { id: personId } = callerOf(caller, 'Sign in as a person to view rooms');
     const snap = await this.col.where('companyId', '==', personId).orderBy('updatedAt', 'desc').limit(100).get();
-    return snap.docs.map((doc) => {
+    return Promise.all(snap.docs.map(async (doc) => {
       const data = doc.data() as StoredTalentRoom;
       const decision = normalizeDecision(data.needsDecision);
       const status = normalizeStatus(data.status);
       const waitingOn = status === 'needs_decision' ? decision?.side : undefined;
+      const showDecision = status === 'needs_decision' && decision?.side === 'company';
+      // A shown decision means the room is still blind: no candidate name, employer, link, email or pay figure.
+      const candidateProfile = showDecision && data.candidateId
+        ? (await this.store.collection('profiles').doc(String(data.candidateId)).get()).data() as Partial<TalentProfile> | undefined
+        : undefined;
+      const terms = candidateTerms(candidateProfile);
+      const blind = (s: string) => redactPay(redact(s, terms));
       return {
         id: doc.id,
         companyName: typeof data.companyName === 'string' ? data.companyName : '',
@@ -671,15 +678,15 @@ export class TalentRoomViews {
         ...(data.roleId ? { roleId: data.roleId } : {}),
         status,
         ...(waitingOn ? { waitingOn } : {}),
-        ...(status === 'needs_decision' && decision?.side === 'company'
-          ? { needsDecision: { side: 'company' as const, question: decision.question, options: decision.options } }
+        ...(showDecision && decision
+          ? { needsDecision: { side: 'company' as const, question: blind(decision.question), options: decision.options.map(blind) } }
           : {}),
         ...(typeof data.documentVersion === 'number' ? { documentVersion: data.documentVersion } : {}),
         iApproved: typeof data.documentVersion === 'number' && (data as { approved?: Record<string, number> }).approved?.company === data.documentVersion,
         createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
         updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : '',
       };
-    });
+    }));
   }
 
   /** Candidate requests list (`candidateId == me` ordered by `updatedAt desc`). Never exposes `brief` (beyond the role title), `companyId`, or company-side decision details, and hides the company until both sides approve. */
