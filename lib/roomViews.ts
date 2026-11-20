@@ -2,7 +2,7 @@ import { FieldValue, type Firestore } from '@google-cloud/firestore';
 import { db } from './db.ts';
 import { appUrl } from './github.ts';
 import { attentionEmail, matchEmail, type AttentionKind } from './matchEmail.ts';
-import { redact } from './privacy.ts';
+import { redact, redactPay } from './privacy.ts';
 import { parly, ParlyError, type Room, type RoomMessage, type RoomStatus, type SideInput } from './parly.ts';
 import { callerOf, domainBlocked, parseWorkModes, TalentError, text, verifiedDomains, type CvDetails, type TalentCaller, type TalentProfile, type WorkMode } from './profiles.ts';
 import { noticeMailer, type NoticeMailer } from './workEmail.ts';
@@ -157,12 +157,17 @@ const CANDIDATE_AGENT_INSTRUCTIONS =
 /** A candidate's own agent in Parly: one per candidate, named by their alias ("Candidate #1a2b3c4d" → "cand-1a2b3c4d"). */
 export const candidateAgentKey = (alias: string) => `cand-${alias.replace(/^Candidate #/i, '').toLowerCase().slice(0, 30)}`;
 
+/** What could name a candidate: their employers (names and domains) and LinkedIn name. */
+function candidateTerms(p: Partial<TalentProfile> | undefined): string[] {
+  const linkedinName = p?.verified?.find((v) => v.source === 'linkedin')?.data.name;
+  const name = typeof linkedinName === 'string' ? linkedinName.split(/\s+/).filter((w) => w.length > 2) : [];
+  return [...(p?.experience ?? []).map((r) => r.company), ...(p?.employerDomains ?? []), ...name];
+}
+
 /** Everything the candidate's own agent knows: what companies see, then the private parts it never quotes. */
 export function candidateBrief(p: TalentProfile): string {
   // The agent can't repeat what it was never told: employers, links and emails are blanked before it sees them.
-  const linkedinName = p.verified.find((v) => v.source === 'linkedin')?.data.name;
-  const name = typeof linkedinName === 'string' ? linkedinName.split(/\s+/).filter((w) => w.length > 2) : [];
-  const clean = (s: string) => redact(s, [...p.experience.map((r) => r.company), ...p.employerDomains, ...name]);
+  const clean = (s: string) => redact(s, candidateTerms(p));
   const preferenceLines = formatCandidatePreferencesBrief(p).map(clean);
   const roles = p.experience.filter((r) => !r.hidden).slice(0, 15)
     .map((r) => `- ${clean(r.title)}${r.start || r.end ? ` (${r.start || '?'}–${r.end || 'Present'})` : ''}${r.description ? `: ${clean(r.description.slice(0, 300))}` : ''}`);
@@ -718,7 +723,14 @@ export class TalentRoomViews {
 
       const status = normalizeStatus(room.status ?? record.status);
       const hidden = viewerSide === 'candidate' && status !== 'agreed';
-      const blind = viewerSide === 'candidate' ? blinded(status, record.companyName) : (s: string) => s;
+      // Until both sides approve, the company reads no candidate name, employer, link, email or pay figure.
+      const candidateProfile = viewerSide === 'company' && status !== 'agreed' && record.candidateId
+        ? (await this.store.collection('profiles').doc(String(record.candidateId)).get()).data() as Partial<TalentProfile> | undefined
+        : undefined;
+      const terms = candidateTerms(candidateProfile);
+      const blind = viewerSide === 'candidate'
+        ? blinded(status, record.companyName)
+        : (s: string) => (status === 'agreed' ? s : redactPay(redact(s, terms)));
       const storedDecision = normalizeDecision(record.needsDecision);
       const livePending = room.pending?.[0];
       const liveDecisionSide = livePending ? sideKindOfRef(livePending.sideRef, room, record) : undefined;
