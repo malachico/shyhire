@@ -5,6 +5,7 @@ import { createRole, createRoleAndTalk, readRoleDescription, setRoleStatus, upda
 import type { RoleDraft } from '@/lib/profiles';
 import type { Role } from '@/lib/roles';
 import type { WorkMode } from '@/lib/types';
+import { ConfirmButton } from './Confirm';
 import { Spinner } from './SearchForm';
 
 const WORK_MODES: { mode: WorkMode; label: string }[] = [{ mode: 'remote', label: 'Remote' }, { mode: 'hybrid', label: 'Hybrid' }, { mode: 'onsite', label: 'Onsite' }];
@@ -104,6 +105,6 @@ export function RoleActions({ id, status }: { id: string; status: 'open' | 'paus
   return <div className="flex items-center gap-2">
     {error && <p role="alert" className="text-sm text-[var(--bad-fg)]">{error}</p>}
     <button type="button" className={icon} title={toggle} aria-label={toggle} disabled={pending} onClick={() => set(status === 'open' ? 'paused' : 'open')}><span aria-hidden>{status === 'open' ? '⏸\uFE0E' : '▶\uFE0E'}</span></button>
-    {status !== 'closed' && <button type="button" className={`${icon} muted`} title="Close role" aria-label="Close role" disabled={pending} onClick={() => set('closed')}><span aria-hidden>✕</span></button>}
+    {status !== 'closed' && <ConfirmButton className={`${icon} muted`} title="Close role" ariaLabel="Close role" disabled={pending} message="Close this role? Your agent stops finding new fits." confirmLabel="Yes, close role" onConfirm={() => set('closed')}><span aria-hidden>✕</span></ConfirmButton>}
   </div>;
 }

@@ -5,6 +5,7 @@ import { approveTalentRoom, passTalentRoom } from '@/lib/actions/rooms';
 import type { TalentRoomDetail } from '@/lib/roomViews';
 import { pillClass, statusOf } from '@/lib/status';
 import { Mark } from './Brand';
+import { ConfirmButton } from './Confirm';
 import { Markdown } from './Markdown';
 import { TalentRoomDecisionForm } from './TalentRoomDecisionForm';
 
@@ -29,9 +30,8 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
       else router.refresh();
     });
   };
-  const pass = () => {
-    if (confirmPass()) run(() => passTalentRoom(room.id));
-  };
+  const pass = () => run(() => passTalentRoom(room.id));
+  const passButton = (label: string, className: string) => <ConfirmButton className={className} disabled={pending} message="End this conversation? No contact details will be shared." confirmLabel="Yes, pass" onConfirm={pass}>{label}</ConfirmButton>;
 
   return <main className="mx-auto max-w-3xl px-4 py-8">
     <a href={isCompany ? '/talent/search' : '/talent/conversations'} className="muted text-sm">← {isCompany ? 'Roles' : 'Conversations'}</a>
@@ -63,7 +63,7 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
     {!ended && !matched && myDecision && <section className="card mt-6">
       <p className="muted flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.08em]"><Mark size={34} flower={false} look="up" />Your agent asks</p>
       <TalentRoomDecisionForm roomId={room.id} question={myDecision.question} options={myDecision.options} />
-      <button type="button" className="muted mt-4 text-sm underline" disabled={pending} onClick={pass}>Pass on this conversation</button>
+      <div className="mt-4">{passButton('Pass on this conversation', 'muted text-sm underline')}</div>
     </section>}
 
     {!ended && !matched && !myDecision && !theyDecide && doc && <section className="card mt-6">
@@ -72,8 +72,8 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
       {doc.myApproved
         ? <p className="muted mt-3 text-sm">Contact details are shared once they approve too.</p>
         : <div className="mt-4 flex flex-wrap items-center gap-4">
-            <button type="button" className="btn-primary" disabled={pending} onClick={() => run(() => approveTalentRoom(room.id, doc.version))}>{pending ? 'Approving…' : 'Approve'}</button>
-            <button type="button" className="muted text-sm underline" disabled={pending} onClick={pass}>Pass</button>
+            <ConfirmButton className="btn-primary" disabled={pending} message="Approve? If they approve too, your contact details are shared with them." confirmLabel="Yes, share my contact details" confirmClassName="btn-primary" onConfirm={() => run(() => approveTalentRoom(room.id, doc.version))}>{pending ? 'Approving…' : 'Approve'}</ConfirmButton>
+            {passButton('Pass', 'muted text-sm underline')}
           </div>}
       <p className="muted mt-3 text-xs">Approving shares your contact details with them only if they approve too.</p>
     </section>}
@@ -81,7 +81,7 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
     {!ended && !matched && !myDecision && (theyDecide || !doc) && <section className="card mt-6">
       <p className="font-medium">{theyDecide ? 'Waiting for them to answer their agent.' : 'The agents are talking.'}</p>
       <p className="muted mt-1 text-sm">You&apos;ll see a summary here to approve, or a question if your agent needs you.</p>
-      <button type="button" className="muted mt-4 text-sm underline" disabled={pending} onClick={pass}>Pass on this conversation</button>
+      <div className="mt-4">{passButton('Pass on this conversation', 'muted text-sm underline')}</div>
     </section>}
 
     {ended && <section className="card mt-6"><p className="font-medium">{s.label}.</p><p className="muted mt-1 text-sm">{room.status === 'stuck' ? "The agents couldn't find terms that work for both sides. " : ''}No contact details were shared.</p></section>}
@@ -108,6 +108,3 @@ export function ConversationView({ room }: { room: TalentRoomDetail }) {
   </main>;
 }
 
-function confirmPass(): boolean {
-  return typeof window === 'undefined' || window.confirm('End this conversation? No contact details will be shared.');
-}
