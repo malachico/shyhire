@@ -1,7 +1,7 @@
 'use client';
 import { usePathname } from 'next/navigation';
 
-/** The two tabs for the current mode; the active one is underlined. */
+/** The tabs for the current mode; the active one is underlined. */
 export function NavTabs({ tabs, dot }: { tabs: { href: string; label: string }[]; dot?: string }) {
   const path = usePathname();
   return <div className="flex items-center gap-5 text-sm">

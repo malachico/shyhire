@@ -60,7 +60,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
         <h2 className="font-semibold">Other conversations</h2>
         <RoomList rooms={byRole['_']} />
       </section>}
-      <SearchForm formClass="flex gap-2 pt-4" className="input min-w-0 flex-1 text-sm" aria-label="Browse candidates" placeholder="Or browse candidates yourself…" button="Browse" buttonClass="btn text-sm" />
+      <SearchForm formClass="flex gap-2 pt-4" className="input min-w-0 flex-1 text-sm" id="browse" aria-label="Browse candidates" placeholder="Or browse candidates yourself…" button="Browse" buttonClass="btn text-sm" />
     </main>;
   }
   // The candidates this person already talks to: their card shows that conversation instead of "Talk".
