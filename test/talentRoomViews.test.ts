@@ -412,7 +412,7 @@ describe('Talent company rooms (C) and candidate requests (D)', () => {
     assert.doesNotMatch(candSide.brief, /google-sub-candidate-split|PrivateCo/);
   });
 
-  it('keeps the company hidden from the candidate until both sides approve, and hides nothing from the company', async () => {
+  it('keeps the company hidden from the candidate until both sides approve, and shows the company its own name', async () => {
     const db = testDb();
     const stored: StoredTalentRoom = {
       companyId: 'gh-company-blind',
@@ -447,8 +447,9 @@ describe('Talent company rooms (C) and candidate requests (D)', () => {
 
     const companyView = await views.getRoomView('gh-company-blind', 'room-blind');
     assert.equal(companyView.companyName, 'acme.dev');
-    assert.equal(companyView.document?.text, text);
-    assert.equal(companyView.messages[0]!.text, text);
+    // While blind, links are blanked for the company too.
+    assert.equal(companyView.document?.text, 'Acme builds [link] see acme.dev');
+    assert.equal(companyView.messages[0]!.text, 'Acme builds [link] see acme.dev');
 
     room.status = 'agreed';
     room.pending = [];

@@ -24,3 +24,13 @@ export function privacyLeaks(text: string, me: { name: string; email: string }, 
   if (hit) out.push(hit);
   return out;
 }
+
+const CURRENCY = String.raw`(?:[$€£₪¥]|(?:USD|EUR|GBP|ILS|NIS)\b)`;
+const NUMBER = String.raw`\d+(?:[.,\s]\d{3})*(?:[.,]\d+)?`;
+const AMOUNT = String.raw`${NUMBER}(?:\s?[km]\b)?`;
+/** Pay figures blanked: "$180k", "USD 200,000", "180,000", "₪30k/month", "120k". Leaves years, dates, "#11223344" and "5 years" alone. */
+const PAY = new RegExp(
+  String.raw`${CURRENCY}\s?${AMOUNT}|(?<![#\w.,])${NUMBER}\s?(?:k\b|${CURRENCY})|(?<![#\w.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\w,])`,
+  'giu',
+);
+export const redactPay = (text: string): string => text.replace(PAY, '[pay]');
