@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Experience, Fact, ProfileDraft, TalentProfile, WorkMode } from '@/lib/talent';
 import { saveTalentProfile, setDiscoverable, writeSummary } from '@/lib/actions/talent';
@@ -7,6 +7,8 @@ import { privacyLeaks } from '@/lib/privacy';
 import { legacyDate, monthValue } from '@/lib/months';
 import { MAX_PDF_BYTES, MAX_PDF_LABEL } from '@/lib/upload';
 import { Mark } from '@/components/Brand';
+import { ConfirmButton } from '@/components/Confirm';
+import { draftToLose, factsToLose, roleHasContent } from '@/lib/editorGuards';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'ILS', 'CAD', 'AUD', 'CHF', 'SGD'] as const;
 const WORK_MODES: { mode: WorkMode; label: string }[] = [
@@ -129,6 +131,12 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
   }
 
   const dirty = JSON.stringify({ ...profile, paused: saved.paused }) !== JSON.stringify(saved) || domains !== saved.employerDomains.join(', ') || locationsText !== saved.locations.join(', ') || salaryMin !== (saved.salary.min !== undefined ? String(saved.salary.min) : '') || currency !== saved.salary.currency;
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
   const banner = (error || notice) ? <div>
     {error && <p role="alert" className="mb-4 rounded-lg bg-[var(--bad-bg)] p-3 text-sm text-[var(--bad-fg)]">{error}</p>}
     {notice && <p role="status" className="muted mb-4 text-sm">{notice}</p>}
@@ -143,7 +151,9 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       </label> : <label className="field">Paste your CV or LinkedIn text<textarea className="input min-h-40" maxLength={40000} disabled={busy} value={source} onChange={(e) => setSource(e.target.value)} /></label>}
       <p className="hint">We read it once to fill in your profile and don&apos;t keep the file.</p>
       <div className="flex flex-wrap items-center gap-4">
-        <button className="btn-primary" disabled={busy || (!file && !source.trim())} onClick={() => void importDraft()}>{busy ? 'Reading…' : 'Continue'}</button>
+        {draftToLose(profile)
+          ? <ConfirmButton className="btn-primary" disabled={busy || (!file && !source.trim())} message="This replaces your headline, roles and facts." confirmLabel="Replace" onConfirm={() => void importDraft()}>{busy ? 'Reading…' : 'Continue'}</ConfirmButton>
+          : <button className="btn-primary" disabled={busy || (!file && !source.trim())} onClick={() => void importDraft()}>{busy ? 'Reading…' : 'Continue'}</button>}
         <button className="muted text-sm underline" disabled={busy} onClick={() => { setPasting(!pasting); setFile(undefined); }}>{pasting ? 'Upload a PDF instead' : 'Paste text instead'}</button>
       </div>
     </> : <p className="muted text-sm">CV import isn&apos;t available right now. Fill in your profile by hand.</p>}
@@ -168,7 +178,9 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
         <label className="field">To<input type="month" className="input" placeholder="YYYY-MM" value={monthValue(r.end)} onChange={(e) => role(r.id, { end: e.target.value })} /><span className="hint block">{legacyDate(r.end) ? `Saved as “${legacyDate(r.end)}”` : 'Leave empty if you still work here.'}</span></label>
       </div>
       <label className="field">What you did<textarea className="input min-h-20" maxLength={4000} value={r.description} onChange={(e) => role(r.id, { description: e.target.value })} /></label>
-      <div className="flex justify-between text-sm"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={r.hidden} onChange={(e) => role(r.id, { hidden: e.target.checked })} /> Hide from matching</label><button type="button" className="muted underline" onClick={() => change({ experience: profile.experience.filter((x) => x.id !== r.id) })}>Remove</button></div>
+      <div className="flex justify-between text-sm"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={r.hidden} onChange={(e) => role(r.id, { hidden: e.target.checked })} /> Hide from matching</label>{roleHasContent(r)
+        ? <ConfirmButton className="muted underline" message="Remove this role?" confirmLabel="Remove" onConfirm={() => change({ experience: profile.experience.filter((x) => x.id !== r.id) })}>Remove</ConfirmButton>
+        : <button type="button" className="muted underline" onClick={() => change({ experience: profile.experience.filter((x) => x.id !== r.id) })}>Remove</button>}</div>
     </div>)}
     <button type="button" className="btn text-sm" disabled={profile.experience.length >= 40} onClick={() => change({ experience: [...profile.experience, { id: crypto.randomUUID(), title: '', company: '', start: '', end: '', description: '', hidden: false, source: 'self' }] })}>Add a role</button>
     {onboarded ? optionalFields : <details><summary className="cursor-pointer text-sm font-medium">More (optional)</summary><div className="mt-4 space-y-4">{aboutField}{optionalFields}</div></details>}
@@ -229,7 +241,9 @@ export function TalentProfileEditor({ initial, verifiedFacts, me, error: initial
       </li>)}</ul>
       <div className="mt-3 flex flex-wrap gap-2">
         {profile.facts.length < 10 && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => change({ facts: [...profile.facts, { id: crypto.randomUUID(), text: '', source: 'cv' }] })}>+ Add a fact</button>}
-        {importAvailable && <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => void rewrite()}>{writing ? 'Writing…' : '✨ Write with AI'}</button>}
+{importAvailable && (factsToLose(profile.facts)
+          ? <ConfirmButton className="btn min-h-10 text-sm" disabled={busy} message="This replaces your facts." confirmLabel="Replace" onConfirm={() => void rewrite()}>{writing ? 'Writing…' : '✨ Write with AI'}</ConfirmButton>
+          : <button type="button" className="btn min-h-10 text-sm" disabled={busy} onClick={() => void rewrite()}>{writing ? 'Writing…' : '✨ Write with AI'}</button>)}
       </div>
       {rewriteError && <p role="alert" className="mt-3 rounded-lg bg-[var(--bad-bg)] p-3 text-sm text-[var(--bad-fg)]">{rewriteError}</p>}
     </div>
