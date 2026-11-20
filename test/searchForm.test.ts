@@ -12,7 +12,7 @@ it('Fill is a real button under a full-width box, and it spins while reading', (
 it('Browse and Find spin from the click until the results arrive', () => {
   const form = readFileSync('components/SearchForm.tsx', 'utf8');
   assert.match(form, /start\(\(\) => router\.push\(/);
-  assert.match(form, /disabled=\{pending\}>\{pending && <Spinner \/>\}/);
+  assert.match(form, /disabled=\{pending\}>\{pending && <Spinner label="Searching…" \/>\}/);
   const page = readFileSync('app/talent/search/page.tsx', 'utf8');
   assert.equal(page.match(/<SearchForm /g)?.length, 2);
   assert.doesNotMatch(page, /<form /);
