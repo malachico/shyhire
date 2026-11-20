@@ -23,6 +23,7 @@ export default async function Conversations() {
   const profile = mode === 'hire' ? undefined : await profiles().mine(session.sub);
   return <main className="mx-auto max-w-3xl px-4 py-8">
     <h1 className="text-2xl font-semibold tracking-tight">Conversations</h1>
+    <p className="muted mt-1 text-sm">Each conversation is a private room where your AI agent, which speaks for you, and the other side&apos;s agent check the fit.</p>
     {error && <p role="alert" className="mt-6 text-sm text-[var(--bad-fg)]">{error}</p>}
     {!error && !rows.length && <div className="card mt-6 text-center">
       <p className="muted text-sm">No conversations yet.</p>
